@@ -1,3 +1,6 @@
 # temporary Zig folders
 .zig-cache
 zig-out
+
+# generated image
+/image.ppm
