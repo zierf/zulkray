@@ -1,7 +1,12 @@
 const std = @import("std");
 const File = std.fs.File;
 
-pub fn exportAsPpm(file: *const File, image_width: u32, image_height: u32, binary: ?bool) !void {
+pub const vector = @import("vector.zig");
+
+pub const Vec3f = vector.Vec3f;
+pub const ColorRgb = vector.ColorRgb;
+
+pub fn exportAsPpm(file: *const File, width: u32, height: u32, binary: ?bool) !void {
     const is_binary = binary orelse true;
 
     // track progress
@@ -9,7 +14,7 @@ pub fn exportAsPpm(file: *const File, image_width: u32, image_height: u32, binar
         .root_name = "Rendering Scene …",
     });
 
-    const sub_node = progress_root.start("rendered rows", image_height);
+    const sub_node = progress_root.start("rendered rows", height);
     defer sub_node.end();
 
     // prepare file writer
@@ -21,30 +26,28 @@ pub fn exportAsPpm(file: *const File, image_width: u32, image_height: u32, binar
 
     try file_writer.print("{s}\n{} {}\n255\n", .{
         image_format,
-        image_width,
-        image_height,
+        width,
+        height,
     });
 
     // write image contents
-    for (0..image_height) |height| {
-        for (0..image_width) |width| {
-            const r: f32 = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(image_width - 1));
-            const g: f32 = @as(f32, @floatFromInt(height)) / @as(f32, @floatFromInt(image_height - 1));
-            const b: f32 = 0.0;
-
-            const ir: u8 = @intFromFloat(255.999 * r);
-            const ig: u8 = @intFromFloat(255.999 * g);
-            const ib: u8 = @intFromFloat(255.999 * b);
+    for (0..height) |row| {
+        for (0..width) |column| {
+            const color: ColorRgb = .init(.{
+                @as(f32, @floatFromInt(column)) / @as(f32, @floatFromInt(width - 1)),
+                @as(f32, @floatFromInt(row)) / @as(f32, @floatFromInt(height - 1)),
+                0.0,
+            });
 
             if (is_binary) {
-                try file_writer.writeByte(ir);
-                try file_writer.writeByte(ig);
-                try file_writer.writeByte(ib);
+                try file_writer.writeByte(color.rByte());
+                try file_writer.writeByte(color.gByte());
+                try file_writer.writeByte(color.bByte());
             } else {
                 try file_writer.print("{: >3} {: >3} {: >3}\n", .{
-                    ir,
-                    ig,
-                    ib,
+                    color.rByte(),
+                    color.gByte(),
+                    color.bByte(),
                 });
             }
         }
@@ -55,4 +58,9 @@ pub fn exportAsPpm(file: *const File, image_width: u32, image_height: u32, binar
 
     // flush writer to write all data
     try buffered_writer.flush();
+}
+
+test {
+    std.testing.refAllDecls(@This());
+    // _ = &vector;
 }
