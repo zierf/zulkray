@@ -2,11 +2,22 @@ const std = @import("std");
 const File = std.fs.File;
 
 pub const vector = @import("vector.zig");
+pub const camera = @import("camera.zig");
+pub const ray = @import("ray.zig");
 
 pub const Vec3f = vector.Vec3f;
+pub const Point3 = vector.Point3;
 pub const ColorRgb = vector.ColorRgb;
+pub const Camera = camera.Camera;
+pub const Ray = ray.Ray;
 
-pub fn exportAsPpm(file: *const File, width: u32, height: u32, binary: ?bool) !void {
+pub fn exportAsPpm(
+    file: *const File,
+    width: u32,
+    height: u32,
+    cam: Camera,
+    binary: ?bool,
+) !void {
     const is_binary = binary orelse true;
 
     // track progress
@@ -33,11 +44,22 @@ pub fn exportAsPpm(file: *const File, width: u32, height: u32, binary: ?bool) !v
     // write image contents
     for (0..height) |row| {
         for (0..width) |column| {
-            const color: ColorRgb = .init(.{
-                @as(f32, @floatFromInt(column)) / @as(f32, @floatFromInt(width - 1)),
-                @as(f32, @floatFromInt(row)) / @as(f32, @floatFromInt(height - 1)),
-                0.0,
-            });
+            const pixel_u = cam.pixel_delta_u.multiply(@floatFromInt(column));
+            const pixel_v = cam.pixel_delta_v.multiply(@floatFromInt(row));
+
+            // vector for pixel_upper_left points to first pixel center
+            const pixel_center = cam.pixel_upper_left.addVec(pixel_u).addVec(pixel_v);
+            const ray_direction = pixel_center.subtractVec(cam.camera_center);
+
+            const pixel_ray = try Ray.init(cam.camera_center, ray_direction);
+            const color: ColorRgb = pixel_ray.color();
+
+            // fill with a red-green-yellow gradient, left->right: red, top->bottom: green
+            // const color: ColorRgb = .init(.{
+            //     @as(f32, @floatFromInt(column)) / @as(f32, @floatFromInt(width - 1)),
+            //     @as(f32, @floatFromInt(row)) / @as(f32, @floatFromInt(height - 1)),
+            //     0.0,
+            // });
 
             if (is_binary) {
                 try file_writer.writeByte(color.rByte());

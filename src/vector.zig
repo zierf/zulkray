@@ -6,7 +6,7 @@ const expectError = std.testing.expectError;
 
 const epsilonNearZero = 1e-8;
 
-const VecOperationError = error{
+pub const VecError = error{
     DivisionByZero,
     UnitVectorForZero,
 };
@@ -112,7 +112,7 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
             const len = self.length();
 
             if (isFloatEqual(T, 0, len)) {
-                return VecOperationError.UnitVectorForZero;
+                return VecError.UnitVectorForZero;
             }
 
             return self.divide(len) catch unreachable;
@@ -193,7 +193,7 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
 
         pub fn divide(self: *const Self, scalar: T) !Self {
             if (scalar == 0) {
-                return VecOperationError.DivisionByZero;
+                return VecError.DivisionByZero;
             }
 
             const divisor: Self = Self.splat(scalar);
@@ -290,6 +290,8 @@ fn isFloatEqual(comptime T: type, x: T, y: T) bool {
 pub const Vec2f = Vector(f32, 2);
 pub const Vec3f = Vector(f32, 3);
 pub const Vec4f = Vector(f32, 4);
+
+pub const Point3 = Vec3f;
 
 pub const ColorRgb = Vec3f;
 pub const ColorRgba = Vec4f;
@@ -418,8 +420,8 @@ test "scalar operations" {
     try expectEqual(Vec3f.init(.{ -0.5, 1.0, -1.5 }), test_vec.divide(2));
 
     // division by zero
-    try expectError(VecOperationError.DivisionByZero, test_vec.divide(0.0));
+    try expectError(VecError.DivisionByZero, test_vec.divide(0.0));
 
     // no unit vector for zero vector
-    try expectError(VecOperationError.UnitVectorForZero, Vec3f.zero().unit());
+    try expectError(VecError.UnitVectorForZero, Vec3f.zero().unit());
 }
