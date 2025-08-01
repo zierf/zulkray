@@ -35,7 +35,27 @@ pub const Ray = struct {
         );
     }
 
+    fn hitSphere(self: *const Self, center: *const Vec3f, radius: f32) bool {
+        const oc: Vec3f = center.subtractVec(self.origin);
+
+        // discriminant of quadratic equation
+        const a = self.direction.dot(self.direction);
+        const b = -2.0 * self.direction.dot(oc);
+        const c = oc.dot(oc) - (radius * radius);
+
+        const discriminant = (b * b) - (4 * a * c);
+
+        return (discriminant >= 0);
+    }
+
     pub fn color(self: *const Self) ColorRgb {
+        const sphere_center = Point3.init(.{ 0.0, 0.0, -1.0 });
+
+        if (self.hitSphere(&sphere_center, 0.5)) {
+            return ColorRgb.init(.{ 1.0, 0.0, 0.0 });
+        }
+
+        // render background color, needs unit vector
         const unit_direction: Vec3f = self.direction.unit() catch unreachable;
 
         // define color based on a bluish->white interpolated gradient from top to bottom
