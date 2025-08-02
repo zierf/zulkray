@@ -6,6 +6,8 @@ const Vec3f = vector.Vec3f;
 const Point3 = vector.Point3;
 const ColorRgb = vector.ColorRgb;
 
+const black = ColorRgb.init(.{ 0.0, 0.0, 0.0 });
+
 pub const RayError = error{
     RayWithoutDirection,
 };
@@ -35,24 +37,52 @@ pub const Ray = struct {
         );
     }
 
-    fn hitSphere(self: *const Self, center: *const Vec3f, radius: f32) bool {
-        const oc: Vec3f = center.subtractVec(self.origin);
+    fn hitSphere(self: *const Self, center: *const Vec3f, radius: f32) ?f32 {
+        const ray_to_sphere: Vec3f = center.subtractVec(self.origin);
 
-        // discriminant of quadratic equation
+        // quadratic equation
         const a = self.direction.dot(self.direction);
-        const b = -2.0 * self.direction.dot(oc);
-        const c = oc.dot(oc) - (radius * radius);
+        const b = -2.0 * self.direction.dot(ray_to_sphere);
+        const c = ray_to_sphere.dot(ray_to_sphere) - (radius * radius);
 
         const discriminant = (b * b) - (4 * a * c);
 
-        return (discriminant >= 0);
+        // not hit (no sqaure root for negative values)
+        if (discriminant < 0) {
+            return null;
+        }
+
+        // solve quadratic equation
+        const x1 = (-b - @sqrt(discriminant)) / (2.0 * a);
+
+        if (x1 >= 0.0) {
+            return x1;
+        }
+
+        const x2 = (-b + @sqrt(discriminant)) / (2.0 * a);
+
+        if (x2 >= 0.0) {
+            return x2;
+        }
+
+        return null;
     }
 
     pub fn color(self: *const Self) ColorRgb {
         const sphere_center = Point3.init(.{ 0.0, 0.0, -1.0 });
 
-        if (self.hitSphere(&sphere_center, 0.5)) {
-            return ColorRgb.init(.{ 1.0, 0.0, 0.0 });
+        const sphere_hit_distance = self.hitSphere(&sphere_center, 0.5);
+
+        if (sphere_hit_distance) |*hit_distance| {
+            const sphere_center_to_hit = self.at(hit_distance.*).subtractVec(sphere_center);
+
+            const normal_vector: Vec3f = sphere_center_to_hit.unit() catch {
+                return black;
+            };
+
+            // each component of unit vector is between [−1,1], map to color from [0,1]
+            const normal_color: ColorRgb = normal_vector.add(1.0).multiply(0.5);
+            return normal_color;
         }
 
         // render background color, needs unit vector
