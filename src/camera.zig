@@ -1,4 +1,4 @@
-pub const vector = @import("vector.zig");
+const vector = @import("vector.zig");
 
 const Vec3f = vector.Vec3f;
 const Point3 = vector.Point3;

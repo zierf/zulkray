@@ -3,19 +3,28 @@ const File = std.fs.File;
 
 pub const vector = @import("vector.zig");
 pub const camera = @import("camera.zig");
-pub const ray = @import("ray.zig");
+
+pub const Ray = @import("Ray.zig");
+pub const Sphere = @import("objects/Sphere.zig");
+pub const World = @import("World.zig");
+
+const Interval = @import("Interval.zig");
+
+pub const Camera = camera.Camera;
 
 pub const Vec3f = vector.Vec3f;
 pub const Point3 = vector.Point3;
-pub const ColorRgb = vector.ColorRgb;
-pub const Camera = camera.Camera;
-pub const Ray = ray.Ray;
+
+const ColorRgb = vector.ColorRgb;
+
+const color_black = ColorRgb.init(.{ 0.0, 0.0, 0.0 });
 
 pub fn exportAsPpm(
     file: *const File,
     width: u32,
     height: u32,
-    cam: Camera,
+    world: *const World,
+    cam: *const Camera,
     binary: ?bool,
 ) !void {
     const is_binary = binary orelse true;
@@ -52,7 +61,7 @@ pub fn exportAsPpm(
             const ray_direction = pixel_center.subtractVec(cam.camera_center);
 
             const pixel_ray = try Ray.init(cam.camera_center, ray_direction);
-            const color: ColorRgb = pixel_ray.color();
+            const color: ColorRgb = world.rayColor(&pixel_ray) catch color_black;
 
             // fill with a red-green-yellow gradient, left->right: red, top->bottom: green
             // const color: ColorRgb = .init(.{

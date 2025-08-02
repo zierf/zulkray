@@ -1,0 +1,42 @@
+const vector = @import("vector.zig");
+
+const Vec3f = vector.Vec3f;
+const Point3 = vector.Point3;
+
+const Self = @This();
+const ElementType = Vec3f.elementType();
+
+pub const RayError = error{
+    RayWithoutDirection,
+};
+
+origin: Point3,
+direction: Vec3f,
+
+pub fn init(orig: Point3, dir: Vec3f) !Self {
+    if (dir.isNearZero()) {
+        return RayError.RayWithoutDirection;
+    }
+
+    return .{
+        .origin = orig,
+        // not normalized until needed
+        .direction = dir,
+    };
+}
+
+pub fn at(self: *const Self, distance: ElementType) Vec3f {
+    return self.origin.addVec(
+        self.direction.multiply(distance),
+    );
+}
+
+pub const HitRecord = struct {
+    point: Point3,
+    normal: Vec3f,
+    distance: f32,
+
+    pub fn hasOutwardNormal(self: *const HitRecord, hit_record: *const Self) bool {
+        return hit_record.direction.dot(self.normal) < 0.0;
+    }
+};
