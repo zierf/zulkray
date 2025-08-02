@@ -40,26 +40,26 @@ pub const Ray = struct {
     fn hitSphere(self: *const Self, center: *const Vec3f, radius: f32) ?f32 {
         const ray_to_sphere: Vec3f = center.subtractVec(self.origin);
 
-        // quadratic equation
-        const a = self.direction.dot(self.direction);
-        const b = -2.0 * self.direction.dot(ray_to_sphere);
-        const c = ray_to_sphere.dot(ray_to_sphere) - (radius * radius);
+        // simplified sphere intersection
+        const a = self.direction.lengthSquared();
+        const h = self.direction.dot(ray_to_sphere);
+        const c = ray_to_sphere.lengthSquared() - (radius * radius);
 
-        const discriminant = (b * b) - (4 * a * c);
+        const discriminant: f32 = (h * h) - (a * c);
 
         // not hit (no sqaure root for negative values)
-        if (discriminant < 0) {
+        if (discriminant < 0.0) {
             return null;
         }
 
-        // solve quadratic equation
-        const x1 = (-b - @sqrt(discriminant)) / (2.0 * a);
+        // solve simplified quadratic equation
+        const x1 = (h - @sqrt(discriminant)) / a;
 
         if (x1 >= 0.0) {
             return x1;
         }
 
-        const x2 = (-b + @sqrt(discriminant)) / (2.0 * a);
+        const x2 = (h + @sqrt(discriminant)) / a;
 
         if (x2 >= 0.0) {
             return x2;
