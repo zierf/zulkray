@@ -1,9 +1,20 @@
+const std = @import("std");
+
 const vector = @import("vector.zig");
+const Interval = @import("Interval.zig");
+const Ray = @import("Ray.zig");
+const World = @import("World.zig");
+const tools = @import("tools.zig");
 
 const Vec3f = vector.Vec3f;
 const Point3 = vector.Point3;
+const ColorRgb = vector.ColorRgb;
 
 const Self = @This();
+
+pub const CameraError = error{
+    RenderOutsideImageDimensions,
+};
 
 image_width: usize,
 image_height: usize,
@@ -15,6 +26,8 @@ pixel_delta_u: Vec3f,
 pixel_delta_v: Vec3f,
 
 pixel_upper_left: Vec3f,
+
+const color_black = ColorRgb.init(.{ 0.0, 0.0, 0.0 });
 
 pub fn init(
     image_width: usize,
@@ -65,4 +78,51 @@ pub fn init(
 
         .pixel_upper_left = pixel_upper_left,
     };
+}
+
+pub fn renderAt(self: *const Self, world: *const World, row: usize, column: usize) !ColorRgb {
+    if (row > self.image_height or column > self.image_width) {
+        return CameraError.RenderOutsideImageDimensions;
+    }
+
+    const pixel_u = self.pixel_delta_u.multiply(@floatFromInt(column));
+    const pixel_v = self.pixel_delta_v.multiply(@floatFromInt(row));
+
+    // vector for pixel_upper_left points to first pixel center
+    const pixel_center = self.pixel_upper_left.addVec(pixel_u).addVec(pixel_v);
+    const ray_direction = pixel_center.subtractVec(self.center);
+
+    const pixel_ray = try Ray.init(self.center, ray_direction);
+    const color: ColorRgb = rayColor(world, &pixel_ray) catch color_black;
+
+    // // fill with a red-green-yellow gradient, left->right: red, top->bottom: green
+    // const color: ColorRgb = .init(.{
+    //     @as(f32, @floatFromInt(column)) / @as(f32, @floatFromInt(self.image_width - 1)),
+    //     @as(f32, @floatFromInt(row)) / @as(f32, @floatFromInt(self.image_height - 1)),
+    //     0.0,
+    // });
+
+    return color;
+}
+
+fn rayColor(world: *const World, ray: *const Ray) !ColorRgb {
+    const ray_limits = try Interval.init(0, std.math.inf(f32));
+
+    if (try world.hitAnything(ray, &ray_limits)) |*hit_record| {
+        // each component of unit vector is between [−1,1], map to color from [0,1]
+        const normal_color: ColorRgb = hit_record.*.normal.add(1.0).multiply(0.5);
+        return normal_color;
+    }
+
+    // render background color, needs unit vector
+    const unit_direction: Vec3f = ray.direction.unit() catch unreachable;
+
+    // define color based on a bluish->white interpolated gradient from top to bottom
+    const percentage = 0.5 * (unit_direction.y() + 1.0);
+
+    return tools.lerpVector(
+        percentage,
+        ColorRgb.init(.{ 1.0, 1.0, 1.0 }),
+        ColorRgb.init(.{ 0.5, 0.7, 1.0 }),
+    );
 }
