@@ -2,6 +2,7 @@ const std = @import("std");
 
 const vector = @import("vector.zig");
 const Interval = @import("Interval.zig");
+const Random = @import("Random.zig");
 const Ray = @import("Ray.zig");
 const World = @import("World.zig");
 const tools = @import("tools.zig");
@@ -22,10 +23,14 @@ image_height: usize,
 focal_length: f32,
 center: Point3,
 
+samples: usize,
+
 pixel_delta_u: Vec3f,
 pixel_delta_v: Vec3f,
 
 pixel_upper_left: Vec3f,
+
+rand: *Random,
 
 const color_black = ColorRgb.init(.{ 0.0, 0.0, 0.0 });
 
@@ -35,6 +40,7 @@ pub fn init(
     viewport_height: f32,
     center: Point3,
     focal_length: f32,
+    samples: usize,
 ) !Self {
     const image_width_float: f32 = @floatFromInt(image_width);
     const image_height_float: f32 = image_width_float / aspect_ratio;
@@ -66,6 +72,8 @@ pub fn init(
     const pixel_delta_center = pixel_delta_u.addVec(pixel_delta_v).multiply(0.5);
     const pixel_upper_left = viewport_upper_left.addVec(pixel_delta_center);
 
+    var random_generator = Random.init(null);
+
     return .{
         .image_width = image_width,
         .image_height = image_height,
@@ -73,10 +81,14 @@ pub fn init(
         .focal_length = focal_length,
         .center = center,
 
+        .samples = samples,
+
         .pixel_delta_u = pixel_delta_u,
         .pixel_delta_v = pixel_delta_v,
 
         .pixel_upper_left = pixel_upper_left,
+
+        .rand = &random_generator,
     };
 }
 
@@ -85,15 +97,21 @@ pub fn renderAt(self: *const Self, world: *const World, row: usize, column: usiz
         return CameraError.RenderOutsideImageDimensions;
     }
 
-    const pixel_u = self.pixel_delta_u.multiply(@floatFromInt(column));
-    const pixel_v = self.pixel_delta_v.multiply(@floatFromInt(row));
+    var color: ColorRgb = ColorRgb.zero();
 
-    // vector for pixel_upper_left points to first pixel center
-    const pixel_center = self.pixel_upper_left.addVec(pixel_u).addVec(pixel_v);
-    const ray_direction = pixel_center.subtractVec(self.center);
+    // add up all the samples
+    for (0..self.samples) |_| {
+        const ray = try self.getRay(row, column);
 
-    const pixel_ray = try Ray.init(self.center, ray_direction);
-    const color: ColorRgb = rayColor(world, &pixel_ray) catch color_black;
+        color = color.addVec(
+            rayColor(world, &ray) catch color_black,
+        );
+    }
+
+    // get the average color of all the samples
+    color = color.multiply(
+        1.0 / @as(f32, @floatFromInt(self.samples)),
+    );
 
     // // fill with a red-green-yellow gradient, left->right: red, top->bottom: green
     // const color: ColorRgb = .init(.{
@@ -103,6 +121,33 @@ pub fn renderAt(self: *const Self, world: *const World, row: usize, column: usiz
     // });
 
     return color;
+}
+
+/// Construct a camera ray originating from the origin
+/// and directed at randomly sampled point around the pixel location
+/// at row and column.
+fn getRay(self: *const Self, row: usize, column: usize) !Ray {
+    const offset: Vec3f = self.pixelSampleSquare();
+
+    // vector for pixel_upper_left points to first pixel center
+    // plus a small offset in the pixel square.
+    const pixel_sample = self.pixel_upper_left
+        .addVec(self.pixel_delta_u.multiply(@as(f32, @floatFromInt(column)) + offset.x()))
+        .addVec(self.pixel_delta_v.multiply(@as(f32, @floatFromInt(row)) + offset.y()));
+
+    const ray_origin: Point3 = self.center;
+    const ray_direction: Vec3f = pixel_sample.subtractVec(ray_origin);
+
+    return try Ray.init(ray_origin, ray_direction);
+}
+
+/// Get a vector to a random point in the [-0.5,-0.5]-[+0.5,+0.5] unit square.
+fn pixelSampleSquare(self: *const Self) Vec3f {
+    return Vec3f.init(.{
+        self.rand.float() - 0.5,
+        self.rand.float() - 0.5,
+        0.0,
+    });
 }
 
 fn rayColor(world: *const World, ray: *const Ray) !ColorRgb {

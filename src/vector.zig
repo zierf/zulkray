@@ -250,18 +250,18 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
             }
 
             pub fn rByte(self: *const Self) u8 {
-                const byte: f32 = @min(1.0, self.r());
-                return @intFromFloat(255.999 * byte);
+                const byte: f32 = @max(0.0, @min(0.999, self.r()));
+                return @intFromFloat(256 * byte);
             }
 
             pub fn gByte(self: *const Self) u8 {
-                const byte: f32 = @min(1.0, self.g());
-                return @intFromFloat(255.999 * byte);
+                const byte: f32 = @max(0.0, @min(0.999, self.g()));
+                return @intFromFloat(256 * byte);
             }
 
             pub fn bByte(self: *const Self) u8 {
-                const byte: f32 = @min(1.0, self.b());
-                return @intFromFloat(255.999 * byte);
+                const byte: f32 = @max(0.0, @min(0.999, self.b()));
+                return @intFromFloat(256 * byte);
             }
         } else struct {};
 

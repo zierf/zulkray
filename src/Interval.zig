@@ -43,3 +43,14 @@ pub fn contains(self: *const Self, value: f32) bool {
 pub fn surrounds(self: *const Self, value: f32) bool {
     return value > self.min and value < self.max;
 }
+
+pub fn clamp(self: *const Self, value: f32) f32 {
+    if (value < self.min) {
+        return self.min;
+    }
+    if (value > self.max) {
+        return self.max;
+    }
+
+    return value;
+}
