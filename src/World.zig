@@ -13,11 +13,15 @@ const ColorRgb = vector.ColorRgb;
 
 const Self = @This();
 
-objects: ArrayList(Sphere),
+pub const Object = union(enum) {
+    Sphere: Sphere,
+};
+
+objects: ArrayList(Object),
 
 pub fn init(allocator: std.mem.Allocator) Self {
     return .{
-        .objects = ArrayList(Sphere).init(allocator),
+        .objects = ArrayList(Object).init(allocator),
     };
 }
 
@@ -29,7 +33,7 @@ pub fn clear(self: *const Self) void {
     self.objects.clearAndFree();
 }
 
-pub fn append(self: *Self, object: Sphere) !void {
+pub fn append(self: *Self, object: Object) !void {
     try self.objects.append(object);
 }
 
@@ -40,12 +44,14 @@ pub fn hitAnything(self: *const Self, ray: *const Ray, ray_limits: *const Interv
     for (self.objects.items) |*object| {
         const limits = try Interval.init(ray_limits.min, closest_distance);
 
-        if (object.*.hit(
-            ray,
-            &limits,
-        )) |hit_record| {
-            closest_distance = hit_record.distance;
-            hit_anything = hit_record;
+        // see [Tagged Unions](https://zig.news/perky/anytype-antics-2398)
+        switch (object.*) {
+            inline else => |*obj| {
+                if (obj.*.hit(ray, &limits)) |hit_record| {
+                    closest_distance = hit_record.distance;
+                    hit_anything = hit_record;
+                }
+            },
         }
     }
 

@@ -22,8 +22,18 @@ pub fn main() !void {
     var world = World.init(allocator);
     defer world.deinit();
 
-    try world.append(try Sphere.init(Point3.init(.{ 0.0, 0.0, -1.0 }), 0.5));
-    try world.append(try Sphere.init(Point3.init(.{ 0.0, -100.5, -1.0 }), 100));
+    try world.append(World.Object{
+        .Sphere = try Sphere.init(
+            Point3.init(.{ 0.0, 0.0, -1.0 }),
+            0.5,
+        ),
+    });
+    try world.append(World.Object{
+        .Sphere = try Sphere.init(
+            Point3.init(.{ 0.0, -100.5, -1.0 }),
+            100,
+        ),
+    });
 
     const camera = try Camera.init(
         image_width,
