@@ -25,6 +25,7 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
     return struct {
         const Self = @This();
 
+        pub const dimension: usize = dim;
         const VecType = @Vector(dim, T);
 
         vector: VecType,
@@ -47,10 +48,6 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
 
         pub fn typeName() []const u8 {
             return @typeName(@typeInfo(VecType).vector.child);
-        }
-
-        pub fn dimension() usize {
-            return @typeInfo(VecType).vector.len;
         }
 
         /// Create a new vector with given dimension, using current values.

@@ -15,6 +15,7 @@ const Self = @This();
 
 pub const CameraError = error{
     RenderOutsideImageDimensions,
+    LinearToGammaConversion,
 };
 
 image_width: usize,
@@ -24,6 +25,7 @@ focal_length: f32,
 center: Point3,
 
 samples: usize,
+bounces: usize,
 
 pixel_delta_u: Vec3f,
 pixel_delta_v: Vec3f,
@@ -41,6 +43,7 @@ pub fn init(
     center: Point3,
     focal_length: f32,
     samples: usize,
+    bounces: usize,
 ) !Self {
     const image_width_float: f32 = @floatFromInt(image_width);
     const image_height_float: f32 = image_width_float / aspect_ratio;
@@ -82,6 +85,7 @@ pub fn init(
         .center = center,
 
         .samples = samples,
+        .bounces = bounces,
 
         .pixel_delta_u = pixel_delta_u,
         .pixel_delta_v = pixel_delta_v,
@@ -104,7 +108,7 @@ pub fn renderAt(self: *const Self, world: *const World, row: usize, column: usiz
         const ray = try self.getRay(row, column);
 
         color = color.addVec(
-            rayColor(world, &ray) catch color_black,
+            self.rayColor(world, &ray, self.bounces) catch color_black,
         );
     }
 
@@ -113,7 +117,10 @@ pub fn renderAt(self: *const Self, world: *const World, row: usize, column: usiz
         1.0 / @as(f32, @floatFromInt(self.samples)),
     );
 
-    // // fill with a red-green-yellow gradient, left->right: red, top->bottom: green
+    // convert color from linear space to gamma space
+    color = try linearToGammaSpace(color);
+
+    // fill viewport with a red-green-yellow gradient, left->right: red, top->bottom: green
     // const color: ColorRgb = .init(.{
     //     @as(f32, @floatFromInt(column)) / @as(f32, @floatFromInt(self.image_width - 1)),
     //     @as(f32, @floatFromInt(row)) / @as(f32, @floatFromInt(self.image_height - 1)),
@@ -150,17 +157,35 @@ fn pixelSampleSquare(self: *const Self) Vec3f {
     });
 }
 
-fn rayColor(world: *const World, ray: *const Ray) !ColorRgb {
-    const ray_limits = try Interval.init(0, std.math.inf(f32));
+fn rayColor(self: *const Self, world: *const World, ray: *const Ray, bounces: usize) !ColorRgb {
+    // stop light collection after reaching the limit for ray bounces
+    if (bounces <= 0) {
+        return color_black;
+    }
+
+    // choose a lower limit that avoids collision with the same surface after rounding errors
+    const ray_limits = try Interval.init(0.001, std.math.inf(f32));
 
     if (try world.hitAnything(ray, &ray_limits)) |*hit_record| {
-        // each component of unit vector is between [−1,1], map to color from [0,1]
-        const normal_color: ColorRgb = hit_record.*.normal.add(1.0).multiply(0.5);
-        return normal_color;
+        // render normal colors: each component of unit vector is between [−1,1], map to color from [0,1]
+        // const normal_color: ColorRgb = hit_record.*.normal.add(1.0).multiply(0.5);
+        // return normal_color;
+
+        // bounce ray in a hemisphere around the normal
+        // const bounce_direction = self.randomOnHemisphere(hit_record.*.normal);
+
+        // lambertian reflection
+        const bounce_direction = hit_record.*.normal.addVec(self.randomUnitVector());
+
+        return (try self.rayColor(
+            world,
+            &(try Ray.init(hit_record.*.point, bounce_direction)),
+            bounces - 1,
+        )).multiply(0.5);
     }
 
     // render background color, needs unit vector
-    const unit_direction: Vec3f = ray.direction.unit() catch unreachable;
+    const unit_direction: Vec3f = ray.*.direction.unit() catch unreachable;
 
     // define color based on a bluish->white interpolated gradient from top to bottom
     const percentage = 0.5 * (unit_direction.y() + 1.0);
@@ -170,4 +195,65 @@ fn rayColor(world: *const World, ray: *const Ray) !ColorRgb {
         ColorRgb.init(.{ 1.0, 1.0, 1.0 }),
         ColorRgb.init(.{ 0.5, 0.7, 1.0 }),
     );
+}
+
+fn randomVector(self: *const Self) Vec3f {
+    return Vec3f.init(.{
+        self.rand.float(),
+        self.rand.float(),
+        self.rand.float(),
+    });
+}
+
+fn randomVectorBetween(self: *const Self, min: f32, max: f32) Vec3f {
+    return Vec3f.init(.{
+        self.rand.floatBetween(min, max),
+        self.rand.floatBetween(min, max),
+        self.rand.floatBetween(min, max),
+    });
+}
+
+fn randomOnHemisphere(self: *const Self, normal: Vec3f) Vec3f {
+    const on_unit_sphere: Vec3f = self.randomUnitVector();
+
+    if (on_unit_sphere.dot(normal) <= 0.0) {
+        return on_unit_sphere.negate();
+    }
+
+    // in the same hemisphere as the normal
+    return on_unit_sphere;
+}
+
+fn randomUnitVector(self: *const Self) Vec3f {
+    while (true) {
+        const random_vector = self.randomVectorBetween(-1.0, 1.0);
+
+        const length_squared = random_vector.lengthSquared();
+
+        const isLengthNearZero = std.math.approxEqAbs(
+            f32,
+            0.0,
+            length_squared,
+            std.math.floatEps(f32),
+        );
+
+        if (!isLengthNearZero and length_squared <= 1.0) {
+            // calculate unit vector, use already known squared length
+            return random_vector.divide(@sqrt(length_squared)) catch unreachable;
+        }
+    }
+}
+
+fn linearToGammaSpace(color: ColorRgb) !ColorRgb {
+    var gamma_corrected = [1]f32{0} ** ColorRgb.dimension;
+
+    for (&gamma_corrected, 0..) |*value, index| {
+        if (color.vector[index] < 0.0) {
+            return CameraError.LinearToGammaConversion;
+        }
+
+        value.* = @sqrt(color.vector[index]);
+    }
+
+    return ColorRgb.init(gamma_corrected);
 }

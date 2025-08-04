@@ -35,7 +35,8 @@ pub fn main() !void {
         2.0,
         Point3.zero(),
         1.0,
-        10,
+        100,
+        50,
     );
 
     const stdout = std.io.getStdOut();
