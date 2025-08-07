@@ -1,7 +1,10 @@
 const vector = @import("vector.zig");
+const material = @import("materials/material.zig");
 
 const Vec3f = vector.Vec3f;
 const Point3 = vector.Point3;
+const ColorRgb = vector.ColorRgb;
+const Material = material.Material;
 
 const Self = @This();
 const ElementType = Vec3f.elementType();
@@ -35,8 +38,15 @@ pub const HitRecord = struct {
     point: Point3,
     normal: Vec3f,
     distance: f32,
+    is_front_face: bool,
+    material: *const Material,
 
-    pub fn hasOutwardNormal(self: *const HitRecord, hit_record: *const Self) bool {
-        return hit_record.direction.dot(self.normal) < 0.0;
+    pub fn hasOutwardNormal(self: *const HitRecord, ray: *const Self) bool {
+        return ray.direction.dot(self.normal) < 0.0;
     }
+};
+
+pub const ScatterRay = struct {
+    ray: Self,
+    attenuation: ColorRgb,
 };

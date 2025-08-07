@@ -7,9 +7,11 @@ pub const Camera = @import("Camera.zig");
 pub const Sphere = @import("objects/Sphere.zig");
 pub const World = @import("World.zig");
 
-pub const Point3 = vector.Point3;
+const material = @import("materials/material.zig");
 
-const ColorRgb = vector.ColorRgb;
+pub const Point3 = vector.Point3;
+pub const ColorRgb = vector.ColorRgb;
+pub const Material = material.Material;
 
 pub fn exportAsPpm(
     file: *const File,

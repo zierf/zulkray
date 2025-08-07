@@ -1,20 +1,23 @@
 const vector = @import("../vector.zig");
 const Interval = @import("../Interval.zig");
 const Ray = @import("../Ray.zig");
+const material = @import("../materials/material.zig");
 
 const Vec3f = vector.Vec3f;
 const Point3 = vector.Point3;
+const Material = material.Material;
 
 const Self = @This();
 
 center: Point3,
 radius: f32,
+mat: *const Material,
 
 pub const SphereError = error{
     SphereWithNegativeRadius,
 };
 
-pub fn init(center: Point3, radius: f32) !Self {
+pub fn init(center: Point3, radius: f32, mat: *const Material) !Self {
     if (radius < 0) {
         return SphereError.SphereWithNegativeRadius;
     }
@@ -22,6 +25,7 @@ pub fn init(center: Point3, radius: f32) !Self {
     return .{
         .center = center,
         .radius = radius,
+        .mat = mat,
     };
 }
 
@@ -59,13 +63,23 @@ pub fn hit(self: *const Self, ray: *const Ray, ray_limits: *const Interval) ?Ray
     const hit_point = ray.at(root);
 
     // division by radius prevents calculating the vector length
-    const sphere_normal = hit_point.subtractVec(self.center).divide(self.radius) catch {
+    var sphere_normal = hit_point.subtractVec(self.center).divide(self.radius) catch {
         return null;
     };
 
-    return Ray.HitRecord{
+    var hit_record = Ray.HitRecord{
         .distance = root,
         .point = hit_point,
         .normal = sphere_normal,
+        .is_front_face = true,
+        .material = self.mat,
     };
+
+    // ray is inside, flip normal
+    if (!hit_record.hasOutwardNormal(ray)) {
+        hit_record.is_front_face = false;
+        hit_record.normal = sphere_normal.multiply(-1);
+    }
+
+    return hit_record;
 }

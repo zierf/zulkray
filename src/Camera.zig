@@ -15,7 +15,6 @@ const Self = @This();
 
 pub const CameraError = error{
     RenderOutsideImageDimensions,
-    LinearToGammaConversion,
 };
 
 image_width: usize,
@@ -118,7 +117,7 @@ pub fn renderAt(self: *const Self, world: *const World, row: usize, column: usiz
     );
 
     // convert color from linear space to gamma space
-    color = try linearToGammaSpace(color);
+    color = try tools.linearToGammaSpace(color);
 
     // fill viewport with a red-green-yellow gradient, left->right: red, top->bottom: green
     // const color: ColorRgb = .init(.{
@@ -134,7 +133,7 @@ pub fn renderAt(self: *const Self, world: *const World, row: usize, column: usiz
 /// and directed at randomly sampled point around the pixel location
 /// at row and column.
 fn getRay(self: *const Self, row: usize, column: usize) !Ray {
-    const offset: Vec3f = self.pixelSampleSquare();
+    const offset: Vec3f = tools.pixelSampleSquare(self.rand);
 
     // vector for pixel_upper_left points to first pixel center
     // plus a small offset in the pixel square.
@@ -148,15 +147,6 @@ fn getRay(self: *const Self, row: usize, column: usize) !Ray {
     return try Ray.init(ray_origin, ray_direction);
 }
 
-/// Get a vector to a random point in the [-0.5,-0.5]-[+0.5,+0.5] unit square.
-fn pixelSampleSquare(self: *const Self) Vec3f {
-    return Vec3f.init(.{
-        self.rand.float() - 0.5,
-        self.rand.float() - 0.5,
-        0.0,
-    });
-}
-
 fn rayColor(self: *const Self, world: *const World, ray: *const Ray, bounces: usize) !ColorRgb {
     // stop light collection after reaching the limit for ray bounces
     if (bounces <= 0) {
@@ -168,20 +158,25 @@ fn rayColor(self: *const Self, world: *const World, ray: *const Ray, bounces: us
 
     if (try world.hitAnything(ray, &ray_limits)) |*hit_record| {
         // render normal colors: each component of unit vector is between [−1,1], map to color from [0,1]
+        // _ = self;
         // const normal_color: ColorRgb = hit_record.*.normal.add(1.0).multiply(0.5);
         // return normal_color;
 
-        // bounce ray in a hemisphere around the normal
-        // const bounce_direction = self.randomOnHemisphere(hit_record.*.normal);
+        const scatter_ray = try hit_record.*.material.*.scatter(
+            self.rand,
+            ray,
+            hit_record,
+        );
 
-        // lambertian reflection
-        const bounce_direction = hit_record.*.normal.addVec(self.randomUnitVector());
+        if (scatter_ray == null) {
+            // ray absorbed
+            return color_black;
+        }
 
-        return (try self.rayColor(
-            world,
-            &(try Ray.init(hit_record.*.point, bounce_direction)),
-            bounces - 1,
-        )).multiply(0.5);
+        const attenuation: ColorRgb = scatter_ray.?.attenuation;
+        const color: ColorRgb = try self.rayColor(world, &scatter_ray.?.ray, bounces - 1);
+
+        return attenuation.multiplyVecComponents(color);
     }
 
     // render background color, needs unit vector
@@ -195,65 +190,4 @@ fn rayColor(self: *const Self, world: *const World, ray: *const Ray, bounces: us
         ColorRgb.init(.{ 1.0, 1.0, 1.0 }),
         ColorRgb.init(.{ 0.5, 0.7, 1.0 }),
     );
-}
-
-fn randomVector(self: *const Self) Vec3f {
-    return Vec3f.init(.{
-        self.rand.float(),
-        self.rand.float(),
-        self.rand.float(),
-    });
-}
-
-fn randomVectorBetween(self: *const Self, min: f32, max: f32) Vec3f {
-    return Vec3f.init(.{
-        self.rand.floatBetween(min, max),
-        self.rand.floatBetween(min, max),
-        self.rand.floatBetween(min, max),
-    });
-}
-
-fn randomOnHemisphere(self: *const Self, normal: Vec3f) Vec3f {
-    const on_unit_sphere: Vec3f = self.randomUnitVector();
-
-    if (on_unit_sphere.dot(normal) <= 0.0) {
-        return on_unit_sphere.negate();
-    }
-
-    // in the same hemisphere as the normal
-    return on_unit_sphere;
-}
-
-fn randomUnitVector(self: *const Self) Vec3f {
-    while (true) {
-        const random_vector = self.randomVectorBetween(-1.0, 1.0);
-
-        const length_squared = random_vector.lengthSquared();
-
-        const isLengthNearZero = std.math.approxEqAbs(
-            f32,
-            0.0,
-            length_squared,
-            std.math.floatEps(f32),
-        );
-
-        if (!isLengthNearZero and length_squared <= 1.0) {
-            // calculate unit vector, use already known squared length
-            return random_vector.divide(@sqrt(length_squared)) catch unreachable;
-        }
-    }
-}
-
-fn linearToGammaSpace(color: ColorRgb) !ColorRgb {
-    var gamma_corrected = [1]f32{0} ** ColorRgb.dimension;
-
-    for (&gamma_corrected, 0..) |*value, index| {
-        if (color.vector[index] < 0.0) {
-            return CameraError.LinearToGammaConversion;
-        }
-
-        value.* = @sqrt(color.vector[index]);
-    }
-
-    return ColorRgb.init(gamma_corrected);
 }

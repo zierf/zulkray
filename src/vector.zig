@@ -123,6 +123,10 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
             return Self.init(self.vector - other.vector);
         }
 
+        pub fn multiplyVecComponents(self: *const Self, other: Self) Self {
+            return Self.init(self.vector * other.vector);
+        }
+
         pub usingnamespace if (dim == 3) struct {
             /// 3D cross product:
             /// ```
