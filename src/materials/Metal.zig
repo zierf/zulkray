@@ -2,11 +2,9 @@ const vector = @import("../vector.zig");
 const Ray = @import("../Ray.zig");
 const Random = @import("../Random.zig");
 const tools = @import("../tools.zig");
-const material = @import("material.zig");
 
 const Vec3f = vector.Vec3f;
 const ColorRgb = vector.ColorRgb;
-const Material = material.Material;
 
 const Self = @This();
 
