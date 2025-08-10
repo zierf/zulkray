@@ -14,17 +14,23 @@ const ColorRgb = vector.ColorRgb;
 const Self = @This();
 
 pub const CameraError = error{
+    NegativeDepthOfField,
+    NonPositiveFocusDistance,
     RenderOutsideImageDimensions,
 };
 
 image_width: usize,
 image_height: usize,
 
-focal_length: f32,
 vfov: f32,
 look_from: Point3,
 look_at: Point3,
 view_up: Vec3f,
+
+focus_distance: f32,
+defocus_angle: f32,
+defocus_disk_u: Vec3f,
+defocus_disk_v: Vec3f,
 
 samples: usize,
 bounces: usize,
@@ -45,6 +51,8 @@ pub fn init(
     look_from: Point3,
     look_at: Point3,
     view_up: Vec3f,
+    focus_distance: f32,
+    defocus_angle: f32,
     samples: usize,
     bounces: usize,
 ) !Self {
@@ -56,12 +64,24 @@ pub fn init(
         @as(usize, @intFromFloat(image_height_float)),
     );
 
+    var focus_dist = focus_distance;
+
+    if (defocus_angle < 0.0) {
+        return CameraError.NegativeDepthOfField;
+    } else if (defocus_angle == 0.0) {
+        // use focal length as fallback
+        focus_dist = look_at.subtractVec(look_from).length();
+    }
+
+    if (focus_distance <= 0.0) {
+        return CameraError.NonPositiveFocusDistance;
+    }
+
     // determine viewport dimensions
-    const focal_length = look_at.subtractVec(look_from).length();
     const theta = std.math.degreesToRadians(vfov);
     const vfov_height = std.math.tan(theta / 2.0);
 
-    const viewport_height = 2 * vfov_height * focal_length;
+    const viewport_height = 2 * vfov_height * focus_distance;
     // viewport is real valued, width less than one is ok here
     const viewport_width: f32 = viewport_height * (image_width_float / image_height_float);
 
@@ -80,7 +100,7 @@ pub fn init(
 
     // calculate vector to focal plane
     const camera_to_focal_plane: Vec3f = look_from.subtractVec(
-        view_opposite.multiply(focal_length),
+        view_opposite.multiply(focus_distance),
     );
 
     // calculate the location of the upper left pixel
@@ -91,18 +111,27 @@ pub fn init(
     const pixel_delta_center = pixel_delta_u.addVec(pixel_delta_v).multiply(0.5);
     const pixel_upper_left = viewport_upper_left.addVec(pixel_delta_center);
 
+    // calculate the camera defocus disk basis vectors
+    const defocus_radius = focus_distance * @tan(std.math.degreesToRadians(defocus_angle / 2.0));
+    const defocus_disk_u = camera_right.multiply(defocus_radius);
+    const defocus_disk_v = camera_up.multiply(defocus_radius);
+
     var random_generator = Random.init(null);
 
     return .{
         .image_width = image_width,
         .image_height = image_height,
 
-        .focal_length = focal_length,
         .vfov = vfov,
 
         .look_from = look_from,
         .look_at = look_at,
         .view_up = view_up,
+
+        .focus_distance = focus_dist,
+        .defocus_angle = defocus_angle,
+        .defocus_disk_u = defocus_disk_u,
+        .defocus_disk_v = defocus_disk_v,
 
         .samples = samples,
         .bounces = bounces,
@@ -150,7 +179,7 @@ pub fn renderAt(self: *const Self, world: *const World, row: usize, column: usiz
     return color;
 }
 
-/// Construct a camera ray originating from the origin
+/// Construct a camera ray originating from the defocus disk
 /// and directed at randomly sampled point around the pixel location
 /// at row and column.
 fn getRay(self: *const Self, row: usize, column: usize) !Ray {
@@ -162,7 +191,7 @@ fn getRay(self: *const Self, row: usize, column: usize) !Ray {
         .addVec(self.pixel_delta_u.multiply(@as(f32, @floatFromInt(column)) + offset.x()))
         .addVec(self.pixel_delta_v.multiply(@as(f32, @floatFromInt(row)) + offset.y()));
 
-    const ray_origin: Point3 = self.look_from;
+    const ray_origin: Point3 = if (self.defocus_angle == 0.0) self.look_from else self.defocusDiskSample();
     const ray_direction: Vec3f = pixel_sample.subtractVec(ray_origin);
 
     return try Ray.init(ray_origin, ray_direction);
@@ -211,4 +240,13 @@ fn rayColor(self: *const Self, world: *const World, ray: *const Ray, bounces: us
         ColorRgb.init(.{ 1.0, 1.0, 1.0 }),
         ColorRgb.init(.{ 0.5, 0.7, 1.0 }),
     );
+}
+
+/// Get a random point in the camera defocus disk.
+fn defocusDiskSample(self: *const Self) Vec3f {
+    const random_point = tools.randomInUnitDisk(self.rand);
+
+    return self.look_from
+        .addVec(self.defocus_disk_u.multiply(random_point.x()))
+        .addVec(self.defocus_disk_v.multiply(random_point.y()));
 }

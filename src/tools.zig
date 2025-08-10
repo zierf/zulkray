@@ -117,3 +117,16 @@ pub fn randomUnitVector(rand: *Random) Vec3f {
         }
     }
 }
+
+pub fn randomInUnitDisk(rand: *Random) Vec3f {
+    while (true) {
+        const random_point = Vec3f.init(.{
+            rand.floatBetween(-1.0, 1.0),
+            rand.floatBetween(-1.0, 1.0),
+            0.0,
+        });
+
+        if (random_point.lengthSquared() < 1.0)
+            return random_point;
+    }
+}
