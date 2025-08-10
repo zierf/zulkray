@@ -9,6 +9,7 @@ pub const World = @import("World.zig");
 
 const material = @import("materials/material.zig");
 
+pub const Vec3f = vector.Vec3f;
 pub const Point3 = vector.Point3;
 pub const ColorRgb = vector.ColorRgb;
 pub const Material = material.Material;

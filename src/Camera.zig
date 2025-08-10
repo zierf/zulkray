@@ -21,7 +21,10 @@ image_width: usize,
 image_height: usize,
 
 focal_length: f32,
-center: Point3,
+vfov: f32,
+look_from: Point3,
+look_at: Point3,
+view_up: Vec3f,
 
 samples: usize,
 bounces: usize,
@@ -38,9 +41,10 @@ const color_black = ColorRgb.init(.{ 0.0, 0.0, 0.0 });
 pub fn init(
     image_width: usize,
     aspect_ratio: f32,
-    viewport_height: f32,
-    center: Point3,
-    focal_length: f32,
+    vfov: f32,
+    look_from: Point3,
+    look_at: Point3,
+    view_up: Vec3f,
     samples: usize,
     bounces: usize,
 ) !Self {
@@ -52,25 +56,38 @@ pub fn init(
         @as(usize, @intFromFloat(image_height_float)),
     );
 
+    // determine viewport dimensions
+    const focal_length = look_at.subtractVec(look_from).length();
+    const theta = std.math.degreesToRadians(vfov);
+    const vfov_height = std.math.tan(theta / 2.0);
+
+    const viewport_height = 2 * vfov_height * focal_length;
     // viewport is real valued, width less than one is ok here
     const viewport_width: f32 = viewport_height * (image_width_float / image_height_float);
 
+    // calculate the u,v,w (camera_right,camera_up,view_opposite) unit basis vectors for the camera coordinate frame
+    const view_opposite = try look_at.subtractVec(look_from).negate().unit();
+    const camera_right = try view_up.cross(view_opposite).unit();
+    const camera_up = view_opposite.cross(camera_right);
+
     // calculate the vectors across the horizontal and down the vertical viewport edges
-    const viewport_u: Vec3f = .init(.{ viewport_width, 0, 0 });
-    const viewport_v: Vec3f = .init(.{ 0, -viewport_height, 0 });
+    const viewport_u: Vec3f = camera_right.multiply(viewport_width);
+    const viewport_v: Vec3f = camera_up.negate().multiply(viewport_height);
 
     // calculate the horizontal and vertical delta vectors from pixel to pixel
     const pixel_delta_u = try viewport_u.divide(@floatFromInt(image_width));
     const pixel_delta_v = try viewport_v.divide(@floatFromInt(image_height));
 
     // calculate vector to focal plane
-    const focal_relative: Vec3f = .init(.{ 0, 0, -focal_length });
-    const camera_to_focal = center.addVec(focal_relative);
+    const camera_to_focal_plane: Vec3f = look_from.subtractVec(
+        view_opposite.multiply(focal_length),
+    );
 
     // calculate the location of the upper left pixel
-    const viewport_upper_left = camera_to_focal
+    const viewport_upper_left = camera_to_focal_plane
         .subtractVec(try viewport_u.divide(2))
         .subtractVec(try viewport_v.divide(2));
+
     const pixel_delta_center = pixel_delta_u.addVec(pixel_delta_v).multiply(0.5);
     const pixel_upper_left = viewport_upper_left.addVec(pixel_delta_center);
 
@@ -81,7 +98,11 @@ pub fn init(
         .image_height = image_height,
 
         .focal_length = focal_length,
-        .center = center,
+        .vfov = vfov,
+
+        .look_from = look_from,
+        .look_at = look_at,
+        .view_up = view_up,
 
         .samples = samples,
         .bounces = bounces,
@@ -141,7 +162,7 @@ fn getRay(self: *const Self, row: usize, column: usize) !Ray {
         .addVec(self.pixel_delta_u.multiply(@as(f32, @floatFromInt(column)) + offset.x()))
         .addVec(self.pixel_delta_v.multiply(@as(f32, @floatFromInt(row)) + offset.y()));
 
-    const ray_origin: Point3 = self.center;
+    const ray_origin: Point3 = self.look_from;
     const ray_direction: Vec3f = pixel_sample.subtractVec(ray_origin);
 
     return try Ray.init(ray_origin, ray_direction);
