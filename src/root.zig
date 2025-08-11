@@ -2,21 +2,25 @@ const std = @import("std");
 const File = std.fs.File;
 
 pub const vector = @import("vector.zig");
+pub const Random = @import("Random.zig");
+pub const tools = @import("tools.zig");
 
 pub const Camera = @import("Camera.zig");
 pub const Sphere = @import("objects/Sphere.zig");
 pub const World = @import("World.zig");
 
-const material = @import("materials/material.zig");
+pub const material = @import("materials/material.zig");
 
 pub const Vec3f = vector.Vec3f;
 pub const Point3 = vector.Point3;
 pub const ColorRgb = vector.ColorRgb;
 pub const Material = material.Material;
+pub const MaterialMap = material.MaterialMap;
 
 pub fn exportAsPpm(
     file: *const File,
     world: *const World,
+    material_map: *const MaterialMap,
     camera: *const Camera,
     binary: ?bool,
 ) !void {
@@ -46,7 +50,7 @@ pub fn exportAsPpm(
     // write image contents
     for (0..camera.image_height) |row| {
         for (0..camera.image_width) |column| {
-            const color: ColorRgb = try camera.renderAt(world, row, column);
+            const color: ColorRgb = try camera.renderAt(world, material_map, row, column);
 
             if (is_binary) {
                 try file_writer.writeByte(color.rByte());

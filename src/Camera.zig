@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const vector = @import("vector.zig");
+const material = @import("materials/material.zig");
 const Interval = @import("Interval.zig");
 const Random = @import("Random.zig");
 const Ray = @import("Ray.zig");
@@ -10,6 +11,8 @@ const tools = @import("tools.zig");
 const Vec3f = vector.Vec3f;
 const Point3 = vector.Point3;
 const ColorRgb = vector.ColorRgb;
+
+const MaterialMap = material.MaterialMap;
 
 const Self = @This();
 
@@ -145,7 +148,13 @@ pub fn init(
     };
 }
 
-pub fn renderAt(self: *const Self, world: *const World, row: usize, column: usize) !ColorRgb {
+pub fn renderAt(
+    self: *const Self,
+    world: *const World,
+    material_map: *const MaterialMap,
+    row: usize,
+    column: usize,
+) !ColorRgb {
     if (row > self.image_height or column > self.image_width) {
         return CameraError.RenderOutsideImageDimensions;
     }
@@ -157,7 +166,7 @@ pub fn renderAt(self: *const Self, world: *const World, row: usize, column: usiz
         const ray = try self.getRay(row, column);
 
         color = color.addVec(
-            self.rayColor(world, &ray, self.bounces) catch color_black,
+            self.rayColor(world, material_map, &ray, self.bounces) catch color_black,
         );
     }
 
@@ -197,7 +206,13 @@ fn getRay(self: *const Self, row: usize, column: usize) !Ray {
     return try Ray.init(ray_origin, ray_direction);
 }
 
-fn rayColor(self: *const Self, world: *const World, ray: *const Ray, bounces: usize) !ColorRgb {
+fn rayColor(
+    self: *const Self,
+    world: *const World,
+    material_map: *const MaterialMap,
+    ray: *const Ray,
+    bounces: usize,
+) !ColorRgb {
     // stop light collection after reaching the limit for ray bounces
     if (bounces <= 0) {
         return color_black;
@@ -212,7 +227,21 @@ fn rayColor(self: *const Self, world: *const World, ray: *const Ray, bounces: us
         // const normal_color: ColorRgb = hit_record.*.normal.add(1.0).multiply(0.5);
         // return normal_color;
 
-        const scatter_ray = try hit_record.*.material.*.scatter(
+        const material_name = hit_record.*.material;
+
+        if (material_name == null) {
+            // missing material key
+            return color_black;
+        }
+
+        const material_instance = material_map.*.getPtr(material_name.?);
+
+        if (material_instance == null) {
+            // missing material instance
+            return color_black;
+        }
+
+        const scatter_ray = try material_instance.?.*.scatter(
             self.rand,
             ray,
             hit_record,
@@ -224,7 +253,7 @@ fn rayColor(self: *const Self, world: *const World, ray: *const Ray, bounces: us
         }
 
         const attenuation: ColorRgb = scatter_ray.?.attenuation;
-        const color: ColorRgb = try self.rayColor(world, &scatter_ray.?.ray, bounces - 1);
+        const color: ColorRgb = try self.rayColor(world, material_map, &scatter_ray.?.ray, bounces - 1);
 
         return attenuation.multiplyVecComponents(color);
     }

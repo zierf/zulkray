@@ -1,23 +1,23 @@
 const vector = @import("../vector.zig");
 const Interval = @import("../Interval.zig");
 const Ray = @import("../Ray.zig");
-const material = @import("../materials/material.zig");
+const mat = @import("../materials/material.zig");
 
 const Vec3f = vector.Vec3f;
 const Point3 = vector.Point3;
-const Material = material.Material;
+const Material = mat.Material;
 
 const Self = @This();
 
 center: Point3,
 radius: f32,
-mat: *const Material,
+material: ?[]const u8,
 
 pub const SphereError = error{
     SphereWithNegativeRadius,
 };
 
-pub fn init(center: Point3, radius: f32, mat: *const Material) !Self {
+pub fn init(center: Point3, radius: f32, material: ?[]const u8) !Self {
     if (radius < 0) {
         return SphereError.SphereWithNegativeRadius;
     }
@@ -25,7 +25,7 @@ pub fn init(center: Point3, radius: f32, mat: *const Material) !Self {
     return .{
         .center = center,
         .radius = radius,
-        .mat = mat,
+        .material = material,
     };
 }
 
@@ -72,7 +72,7 @@ pub fn hit(self: *const Self, ray: *const Ray, ray_limits: *const Interval) ?Ray
         .point = hit_point,
         .normal = sphere_normal,
         .is_front_face = true,
-        .material = self.mat,
+        .material = self.material,
     };
 
     // ray is inside, flip normal

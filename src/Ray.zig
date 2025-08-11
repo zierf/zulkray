@@ -39,7 +39,7 @@ pub const HitRecord = struct {
     normal: Vec3f,
     distance: f32,
     is_front_face: bool,
-    material: *const Material,
+    material: ?[]const u8,
 
     pub fn hasOutwardNormal(self: *const HitRecord, ray: *const Self) bool {
         return ray.direction.dot(self.normal) < 0.0;

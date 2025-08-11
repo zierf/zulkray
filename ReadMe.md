@@ -5,6 +5,8 @@ written in Zig and inspired by [kristRTX](https://github.com/kristoff-it/kristRT
 
 Rendering may be done with _Vulkan_ in the future.
 
+![Final Scene](img/demo.webp "Final Scene")
+
 ## Build and Run
 
 ```SH
