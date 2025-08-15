@@ -183,12 +183,12 @@ fn createDemoScene(
                 (b_float - (spheres_xy / 2.0)) + (0.9 * rand.float()),
             });
 
-            if (sphere_center.subtractVec(Point3.init(.{ 4.0, 0.2, 0.0 })).length() > 0.9) {
+            if (sphere_center.subtractVec(&Point3.init(.{ 4.0, 0.2, 0.0 })).length() > 0.9) {
                 const choose_mat = rand.float();
 
                 if (choose_mat < 0.8) {
                     const albedo = tools.randomVector(&rand).multiplyVecComponents(
-                        tools.randomVector(&rand),
+                        &tools.randomVector(&rand),
                     );
 
                     // don't use this as key for the sphere material, it will go out of scope

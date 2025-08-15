@@ -30,7 +30,7 @@ pub fn init(orig: Point3, dir: Vec3f) !Self {
 
 pub fn at(self: *const Self, distance: ElementType) Vec3f {
     return self.origin.addVec(
-        self.direction.multiply(distance),
+        &self.direction.multiply(distance),
     );
 }
 
@@ -42,7 +42,7 @@ pub const HitRecord = struct {
     material: ?[]const u8,
 
     pub fn hasOutwardNormal(self: *const HitRecord, ray: *const Self) bool {
-        return ray.direction.dot(self.normal) < 0.0;
+        return ray.direction.dot(&self.normal) < 0.0;
     }
 };
 

@@ -12,22 +12,22 @@ pub fn lerpVector(percentage: f32, from: Vec3f, to: Vec3f) Vec3f {
     const first = from.multiply(inverted_percentage);
     const second = to.multiply(percentage);
 
-    return first.addVec(second);
+    return first.addVec(&second);
 }
 
 pub inline fn reflectVector(vec: Vec3f, normal: Vec3f) Vec3f {
     return vec.subtractVec(
-        normal.multiply(vec.dot(normal)).multiply(2.0),
+        &normal.multiply(vec.dot(&normal)).multiply(2.0),
     );
 }
 
 pub inline fn refractVector(uv: Vec3f, n: Vec3f, etai_over_etat: f32) Vec3f {
     const cos_theta: f32 = @min(
-        uv.negate().dot(n),
+        uv.negate().dot(&n),
         1.0,
     );
 
-    const r_out_perp: Vec3f = n.multiply(cos_theta).addVec(uv)
+    const r_out_perp: Vec3f = n.multiply(cos_theta).addVec(&uv)
         .multiply(etai_over_etat);
 
     const r_out_parallel: Vec3f = n.multiply(
@@ -36,7 +36,7 @@ pub inline fn refractVector(uv: Vec3f, n: Vec3f, etai_over_etat: f32) Vec3f {
         ),
     ).negate();
 
-    return r_out_perp.addVec(r_out_parallel);
+    return r_out_perp.addVec(&r_out_parallel);
 }
 
 /// Schlick Approximation
@@ -90,7 +90,7 @@ pub fn randomVectorBetween(rand: *Random, min: f32, max: f32) Vec3f {
 pub fn randomOnHemisphere(rand: *Random, normal: Vec3f) Vec3f {
     const on_unit_sphere: Vec3f = randomUnitVector(rand);
 
-    if (on_unit_sphere.dot(normal) <= 0.0) {
+    if (on_unit_sphere.dot(&normal) <= 0.0) {
         return on_unit_sphere.negate();
     }
 

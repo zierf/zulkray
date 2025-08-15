@@ -25,7 +25,7 @@ pub fn scatter(
 
     // lambertian reflection
     var scatter_direction = hit_record.*.normal.addVec(
-        tools.randomUnitVector(rand),
+        &tools.randomUnitVector(rand),
     );
 
     // catch degenerate scatter direction
