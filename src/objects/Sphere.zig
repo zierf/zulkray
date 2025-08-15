@@ -30,11 +30,11 @@ pub fn init(center: Point3, radius: f32, material: ?[]const u8) !Self {
 }
 
 pub fn hit(self: *const Self, ray: *const Ray, ray_limits: *const Interval) ?Ray.HitRecord {
-    const ray_to_sphere: Vec3f = self.center.subtractVec(ray.origin);
+    const ray_to_sphere: Vec3f = self.center.subtractVec(&ray.origin);
 
     // simplified sphere intersection (quadratic equation)
     const a = ray.direction.lengthSquared();
-    const h = ray.direction.dot(ray_to_sphere);
+    const h = ray.direction.dot(&ray_to_sphere);
     const c = ray_to_sphere.lengthSquared() - (self.radius * self.radius);
 
     const discriminant: f32 = (h * h) - (a * c);
@@ -63,7 +63,7 @@ pub fn hit(self: *const Self, ray: *const Ray, ray_limits: *const Interval) ?Ray
     const hit_point = ray.at(root);
 
     // division by radius prevents calculating the vector length
-    var sphere_normal = hit_point.subtractVec(self.center).divide(self.radius) catch {
+    var sphere_normal = hit_point.subtractVec(&self.center).divide(self.radius) catch {
         return null;
     };
 

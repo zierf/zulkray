@@ -29,12 +29,12 @@ pub fn scatter(
     const reflected_ray: Vec3f = tools.reflectVector(ray.*.direction, hit_record.*.normal);
 
     const fuzzy_ray = (try reflected_ray.unit()).addVec(
-        tools.randomUnitVector(rand).multiply(self.fuzz),
+        &tools.randomUnitVector(rand).multiply(self.fuzz),
     );
 
     const scatter_ray = try Ray.init(hit_record.*.point, fuzzy_ray);
 
-    if (scatter_ray.direction.dot(hit_record.*.normal) <= 0) {
+    if (scatter_ray.direction.dot(&hit_record.*.normal) <= 0) {
         // absorb ray
         return null;
     }

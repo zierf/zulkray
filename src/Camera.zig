@@ -73,7 +73,7 @@ pub fn init(
         return CameraError.NegativeDepthOfField;
     } else if (defocus_angle == 0.0) {
         // use focal length as fallback
-        focus_dist = look_at.subtractVec(look_from).length();
+        focus_dist = look_at.subtractVec(&look_from).length();
     }
 
     if (focus_distance <= 0.0) {
@@ -89,9 +89,9 @@ pub fn init(
     const viewport_width: f32 = viewport_height * (image_width_float / image_height_float);
 
     // calculate the u,v,w (camera_right,camera_up,view_opposite) unit basis vectors for the camera coordinate frame
-    const view_opposite = try look_at.subtractVec(look_from).negate().unit();
-    const camera_right = try view_up.cross(view_opposite).unit();
-    const camera_up = view_opposite.cross(camera_right);
+    const view_opposite = try look_at.subtractVec(&look_from).negate().unit();
+    const camera_right = try view_up.cross(&view_opposite).unit();
+    const camera_up = view_opposite.cross(&camera_right);
 
     // calculate the vectors across the horizontal and down the vertical viewport edges
     const viewport_u: Vec3f = camera_right.multiply(viewport_width);
@@ -103,16 +103,16 @@ pub fn init(
 
     // calculate vector to focal plane
     const camera_to_focal_plane: Vec3f = look_from.subtractVec(
-        view_opposite.multiply(focus_distance),
+        &view_opposite.multiply(focus_distance),
     );
 
     // calculate the location of the upper left pixel
     const viewport_upper_left = camera_to_focal_plane
-        .subtractVec(try viewport_u.divide(2))
-        .subtractVec(try viewport_v.divide(2));
+        .subtractVec(&(try viewport_u.divide(2)))
+        .subtractVec(&(try viewport_v.divide(2)));
 
-    const pixel_delta_center = pixel_delta_u.addVec(pixel_delta_v).multiply(0.5);
-    const pixel_upper_left = viewport_upper_left.addVec(pixel_delta_center);
+    const pixel_delta_center = pixel_delta_u.addVec(&pixel_delta_v).multiply(0.5);
+    const pixel_upper_left = viewport_upper_left.addVec(&pixel_delta_center);
 
     // calculate the camera defocus disk basis vectors
     const defocus_radius = focus_distance * @tan(std.math.degreesToRadians(defocus_angle / 2.0));
@@ -166,7 +166,7 @@ pub fn renderAt(
         const ray = try self.getRay(row, column);
 
         color = color.addVec(
-            self.rayColor(world, material_map, &ray, self.bounces) catch color_black,
+            &(self.rayColor(world, material_map, &ray, self.bounces) catch color_black),
         );
     }
 
@@ -197,11 +197,11 @@ fn getRay(self: *const Self, row: usize, column: usize) !Ray {
     // vector for pixel_upper_left points to first pixel center
     // plus a small offset in the pixel square.
     const pixel_sample = self.pixel_upper_left
-        .addVec(self.pixel_delta_u.multiply(@as(f32, @floatFromInt(column)) + offset.x()))
-        .addVec(self.pixel_delta_v.multiply(@as(f32, @floatFromInt(row)) + offset.y()));
+        .addVec(&self.pixel_delta_u.multiply(@as(f32, @floatFromInt(column)) + offset.x()))
+        .addVec(&self.pixel_delta_v.multiply(@as(f32, @floatFromInt(row)) + offset.y()));
 
     const ray_origin: Point3 = if (self.defocus_angle == 0.0) self.look_from else self.defocusDiskSample();
-    const ray_direction: Vec3f = pixel_sample.subtractVec(ray_origin);
+    const ray_direction: Vec3f = pixel_sample.subtractVec(&ray_origin);
 
     return try Ray.init(ray_origin, ray_direction);
 }
@@ -255,7 +255,7 @@ fn rayColor(
         const attenuation: ColorRgb = scatter_ray.?.attenuation;
         const color: ColorRgb = try self.rayColor(world, material_map, &scatter_ray.?.ray, bounces - 1);
 
-        return attenuation.multiplyVecComponents(color);
+        return attenuation.multiplyVecComponents(&color);
     }
 
     // render background color, needs unit vector
@@ -276,6 +276,6 @@ fn defocusDiskSample(self: *const Self) Vec3f {
     const random_point = tools.randomInUnitDisk(self.rand);
 
     return self.look_from
-        .addVec(self.defocus_disk_u.multiply(random_point.x()))
-        .addVec(self.defocus_disk_v.multiply(random_point.y()));
+        .addVec(&self.defocus_disk_u.multiply(random_point.x()))
+        .addVec(&self.defocus_disk_v.multiply(random_point.y()));
 }

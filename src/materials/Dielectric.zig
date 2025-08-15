@@ -36,7 +36,7 @@ pub fn scatter(
     const unit_direction = try ray.direction.unit();
 
     const cos_theta: f32 = @min(
-        unit_direction.negate().dot(hit_record.*.normal),
+        unit_direction.negate().dot(&hit_record.*.normal),
         1.0,
     );
 

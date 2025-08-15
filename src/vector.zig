@@ -38,6 +38,10 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
             };
         }
 
+        pub fn bitSize() usize {
+            return @bitSizeOf(VecType);
+        }
+
         pub fn byteSize() usize {
             return @sizeOf(VecType);
         }
@@ -115,15 +119,15 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
             return self.divide(len) catch unreachable;
         }
 
-        pub fn addVec(self: *const Self, other: Self) Self {
+        pub fn addVec(self: *const Self, other: *const Self) Self {
             return Self.init(self.vector + other.vector);
         }
 
-        pub fn subtractVec(self: *const Self, other: Self) Self {
+        pub fn subtractVec(self: *const Self, other: *const Self) Self {
             return Self.init(self.vector - other.vector);
         }
 
-        pub fn multiplyVecComponents(self: *const Self, other: Self) Self {
+        pub fn multiplyVecComponents(self: *const Self, other: *const Self) Self {
             return Self.init(self.vector * other.vector);
         }
 
@@ -132,7 +136,7 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
             /// ```
             /// (a, b, c) x (d, e, f) = (b*f - c*e, c*d - a*f, a*e - b*d)
             /// ```
-            pub fn cross(self: *const Self, other: Self) Self {
+            pub fn cross(self: *const Self, other: *const Self) Self {
                 return Self.init(.{
                     self.y() * other.z() - self.z() * other.y(),
                     self.z() * other.x() - self.x() * other.z(),
@@ -149,16 +153,16 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
             /// ```
             /// (a, b, 0) x (c, d, 0) = (0, 0, a*d - b*c)
             /// ```
-            pub fn cross(self: *const Self, other: Self) T {
+            pub fn cross(self: *const Self, other: *const Self) T {
                 return self.x() * other.y() - self.y() * other.x();
             }
         } else struct {};
 
-        pub fn dot(self: *const Self, other: Self) T {
+        pub fn dot(self: *const Self, other: *const Self) T {
             return @reduce(.Add, self.vector * other.vector);
         }
 
-        pub fn isPerpendicular(self: *const Self, other: Self) bool {
+        pub fn isPerpendicular(self: *const Self, other: *const Self) bool {
             return isFloatEqual(T, 0.0, self.dot(other));
         }
 
@@ -167,24 +171,24 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
             return @reduce(.And, @abs(self.vector) < epsilon);
         }
 
-        pub fn angleRad(self: *const Self, other: Self) T {
+        pub fn angleRad(self: *const Self, other: *const Self) T {
             return std.math.acos(
                 self.dot(other) / (self.length() * other.length()),
             );
         }
 
-        pub fn angleDeg(self: *const Self, other: Self) T {
+        pub fn angleDeg(self: *const Self, other: *const Self) T {
             return std.math.radiansToDegrees(self.angleRad(other));
         }
 
         pub fn add(self: *const Self, scalar: T) Self {
             const addend: Self = Self.splat(scalar);
-            return self.addVec(addend);
+            return self.addVec(&addend);
         }
 
         pub fn subtract(self: *const Self, scalar: T) Self {
             const subtrahend: Self = Self.splat(scalar);
-            return self.subtractVec(subtrahend);
+            return self.subtractVec(&subtrahend);
         }
 
         pub fn multiply(self: *const Self, scalar: T) Self {
@@ -339,13 +343,13 @@ test "vector angles" {
     const element_type = @TypeOf(test_vec1).elementType();
 
     // example angle
-    try expect(isFloatEqual(element_type, 0.2257264, test_vec1.angleRad(test_vec2)));
-    try expect(isFloatEqual(element_type, 12.93317, test_vec1.angleDeg(test_vec2)));
+    try expect(isFloatEqual(element_type, 0.2257264, test_vec1.angleRad(&test_vec2)));
+    try expect(isFloatEqual(element_type, 12.93317, test_vec1.angleDeg(&test_vec2)));
 
     // perpendicular
-    try expect(isFloatEqual(element_type, 90.0, test_vec3.angleDeg(test_vec4)));
+    try expect(isFloatEqual(element_type, 90.0, test_vec3.angleDeg(&test_vec4)));
     // parallel
-    try expect(isFloatEqual(element_type, 0.0, test_vec3.angleRad(test_vec3)));
+    try expect(isFloatEqual(element_type, 0.0, test_vec3.angleRad(&test_vec3)));
 }
 
 test "dimension change" {
@@ -373,41 +377,41 @@ test "vector operations" {
     const test_vec2d2: Vec2f = .init(.{ 4.0, 1.0 });
 
     // basic operations
-    try expectEqual(Vec3f.init(.{ 3.0, 1.0, 7.0 }), test_vec.addVec(test_vec3d));
-    try expectEqual(Vec3f.init(.{ -1.0, -5.0, -1.0 }), test_vec.subtractVec(test_vec3d));
+    try expectEqual(Vec3f.init(.{ 3.0, 1.0, 7.0 }), test_vec.addVec(&test_vec3d));
+    try expectEqual(Vec3f.init(.{ -1.0, -5.0, -1.0 }), test_vec.subtractVec(&test_vec3d));
 
     // negate
     try expectEqual(Vec3f.init(.{ -1.0, 2.0, -3.0 }), test_vec.negate());
 
     // dot product
-    try expectEqual(8.0, test_vec.dot(test_vec3d));
-    try expectEqual(0.0, Vec3f.zero().dot(test_vec));
-    try expectEqual(0.0, test_vec.dot(Vec3f.zero()));
+    try expectEqual(8.0, test_vec.dot(&test_vec3d));
+    try expectEqual(0.0, Vec3f.zero().dot(&test_vec));
+    try expectEqual(0.0, test_vec.dot(&Vec3f.zero()));
     // perpendicular
-    try expectEqual(0.0, test_vec_dot1.dot(test_vec_dot2));
-    try expectEqual(true, test_vec_dot2.isPerpendicular(test_vec_dot1));
-    try expectEqual(false, test_vec_dot1.isPerpendicular(test_vec));
+    try expectEqual(0.0, test_vec_dot1.dot(&test_vec_dot2));
+    try expectEqual(true, test_vec_dot2.isPerpendicular(&test_vec_dot1));
+    try expectEqual(false, test_vec_dot1.isPerpendicular(&test_vec));
     // parallel
-    try expectEqual(28.0, Vec3f.init(.{ 1.0, 2.0, 3.0 }).dot(Vec3f.init(.{ 2.0, 4.0, 6.0 })));
-    try expectEqual(-28.0, Vec3f.init(.{ -2.0, -4.0, -6.0 }).dot(Vec3f.init(.{ 1.0, 2.0, 3.0 })));
+    try expectEqual(28.0, Vec3f.init(.{ 1.0, 2.0, 3.0 }).dot(&Vec3f.init(.{ 2.0, 4.0, 6.0 })));
+    try expectEqual(-28.0, Vec3f.init(.{ -2.0, -4.0, -6.0 }).dot(&Vec3f.init(.{ 1.0, 2.0, 3.0 })));
     // own dot product is squared length
-    try expectEqual(test_vec.lengthSquared(), test_vec.dot(test_vec));
+    try expectEqual(test_vec.lengthSquared(), test_vec.dot(&test_vec));
 
     // cross product 3D
     try expectEqual(
         Vec3f.init(.{ -3.0, 6.0, -3.0 }),
-        test_vec3d.cross(Vec3f.init(.{ 5.0, 6.0, 7.0 })),
+        test_vec3d.cross(&Vec3f.init(.{ 5.0, 6.0, 7.0 })),
     );
 
     // cross product 2D
     try expectEqual(
         -10,
-        test_vec2d1.cross(test_vec2d2),
+        test_vec2d1.cross(&test_vec2d2),
     );
     try expectEqual(
         Vec3f.init(.{ 0.0, 0.0, -10.0 }),
         test_vec2d1.changeDimension(3, 0.0).cross(
-            test_vec2d2.changeDimension(3, 0.0),
+            &test_vec2d2.changeDimension(3, 0.0),
         ),
     );
 }
