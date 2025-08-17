@@ -4,8 +4,6 @@ const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;
 const expectError = std.testing.expectError;
 
-const epsilonNearZero = 1e-8;
-
 pub const VecError = error{
     DivisionByZero,
     UnitVectorForZero,
@@ -116,7 +114,7 @@ pub fn Vector(comptime T: type, comptime dim: usize) type {
                 return VecError.UnitVectorForZero;
             }
 
-            return self.divide(len) catch unreachable;
+            return self.divide(len) catch @panic("division by zero after explicit check with error");
         }
 
         pub fn addVec(self: *const Self, other: *const Self) Self {

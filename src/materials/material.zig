@@ -3,15 +3,12 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const StringHashMap = std.StringHashMap;
 
-const vector = @import("../vector.zig");
 const Ray = @import("../Ray.zig");
 const Random = @import("../Random.zig");
 
 pub const Dielectric = @import("Dielectric.zig");
 pub const Lambertian = @import("Lambertian.zig");
 pub const Metal = @import("Metal.zig");
-
-const Vec3f = vector.Vec3f;
 
 pub const Material = union(enum) {
     Dielectric: Dielectric,

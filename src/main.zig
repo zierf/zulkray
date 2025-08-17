@@ -1,8 +1,6 @@
 const std = @import("std");
 const lib = @import("zulkray_lib");
 
-const Allocator = std.mem.Allocator;
-
 const Random = lib.Random;
 const tools = lib.tools;
 
@@ -11,7 +9,6 @@ const Point3 = lib.Point3;
 const ColorRgb = lib.ColorRgb;
 
 const Camera = lib.Camera;
-const Material = lib.Material;
 const MaterialMap = lib.MaterialMap;
 const Object = lib.World.Object;
 const Sphere = lib.Sphere;
@@ -31,39 +28,39 @@ pub fn main() !void {
     var world = World.init(allocator);
     defer world.deinit();
 
-    var camera: Camera = undefined;
+    var camera: Camera = blk: {
+        if (!show_demo_scene) {
+            try createMainScene(&world, &material_map);
 
-    if (!show_demo_scene) {
-        try createMainScene(&world, &material_map);
+            break :blk try Camera.init(
+                400,
+                16.0 / 9.0,
+                20.0,
+                Point3.init(.{ -2.0, 2.0, 1.0 }),
+                Point3.init(.{ 0.0, 0.0, -1.0 }),
+                Vec3f.init(.{ 0.0, 1.0, 0.0 }),
+                3.4,
+                10.0,
+                100,
+                50,
+            );
+        } else {
+            try createDemoScene(&world, &material_map);
 
-        camera = try Camera.init(
-            400,
-            16.0 / 9.0,
-            20.0,
-            Point3.init(.{ -2.0, 2.0, 1.0 }),
-            Point3.init(.{ 0.0, 0.0, -1.0 }),
-            Vec3f.init(.{ 0.0, 1.0, 0.0 }),
-            3.4,
-            10.0,
-            100,
-            50,
-        );
-    } else {
-        try createDemoScene(&world, &material_map);
-
-        camera = try Camera.init(
-            400, // 1200,
-            16.0 / 9.0,
-            20.0,
-            Point3.init(.{ 13.0, 2.0, 3.0 }),
-            Point3.init(.{ 0.0, 0.0, 0.0 }),
-            Vec3f.init(.{ 0.0, 1.0, 0.0 }),
-            10.0,
-            0.6,
-            50, // 500,
-            5, // 50,
-        );
-    }
+            break :blk try Camera.init(
+                400, // 1200,
+                16.0 / 9.0,
+                20.0,
+                Point3.init(.{ 13.0, 2.0, 3.0 }),
+                Point3.init(.{ 0.0, 0.0, 0.0 }),
+                Vec3f.init(.{ 0.0, 1.0, 0.0 }),
+                10.0,
+                0.6,
+                50, // 500,
+                5, // 50,
+            );
+        }
+    };
 
     const stdout = std.io.getStdOut();
 

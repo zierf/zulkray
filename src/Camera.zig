@@ -259,7 +259,7 @@ fn rayColor(
     }
 
     // render background color, needs unit vector
-    const unit_direction: Vec3f = ray.*.direction.unit() catch unreachable;
+    const unit_direction: Vec3f = ray.*.direction.unit() catch @panic("ray should have a direction");
 
     // define color based on a bluish->white interpolated gradient from top to bottom
     const percentage = 0.5 * (unit_direction.y() + 1.0);

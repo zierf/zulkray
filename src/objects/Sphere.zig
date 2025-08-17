@@ -1,11 +1,9 @@
 const vector = @import("../vector.zig");
 const Interval = @import("../Interval.zig");
 const Ray = @import("../Ray.zig");
-const mat = @import("../materials/material.zig");
 
 const Vec3f = vector.Vec3f;
 const Point3 = vector.Point3;
-const Material = mat.Material;
 
 const Self = @This();
 

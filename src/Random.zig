@@ -2,6 +2,8 @@ const std = @import("std");
 
 const Self = @This();
 
+// SAFETY: only accessible within struct, triggers a panic beforehand if it cannot be created
+// or before it is used without proper initialization.
 threadlocal var rand_state: ?std.Random.Xoshiro256 = undefined;
 
 /// Create a random generator.
@@ -29,6 +31,11 @@ pub fn init(seed: ?u64) Self {
 
 pub fn float(self: *Self) f32 {
     _ = self;
+
+    if (rand_state == null) {
+        @panic("use the init() function to create a correctly initialized instance");
+    }
+
     const rand = rand_state.?.random();
 
     return rand.float(f32);
@@ -36,6 +43,11 @@ pub fn float(self: *Self) f32 {
 
 pub fn floatBetween(self: *Self, min: f32, max: f32) f32 {
     _ = self;
+
+    if (rand_state == null) {
+        @panic("use the init() function to create a correctly initialized instance");
+    }
+
     const rand = rand_state.?.random();
 
     // random real in [min,max).

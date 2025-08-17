@@ -1,5 +1,3 @@
-const std = @import("std");
-
 const vector = @import("../vector.zig");
 const Ray = @import("../Ray.zig");
 const Random = @import("../Random.zig");

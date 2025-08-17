@@ -113,7 +113,7 @@ pub fn randomUnitVector(rand: *Random) Vec3f {
 
         if (!isLengthNearZero and length_squared <= 1.0) {
             // calculate unit vector, use already known squared length
-            return random_vector.divide(@sqrt(length_squared)) catch unreachable;
+            return random_vector.divide(@sqrt(length_squared)) catch @panic("division by zero after explicit check");
         }
     }
 }
