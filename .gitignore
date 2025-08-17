@@ -1,3 +1,6 @@
+# direnv folder
+.direnv/
+
 # temporary Zig folders
 .zig-cache
 zig-out
