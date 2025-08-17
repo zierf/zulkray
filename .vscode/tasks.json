@@ -1,0 +1,61 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"group": "build",
+			"type": "shell",
+			"label": "Zig: Build Debug",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"command": "zig",
+			"args": [
+				"build"
+			]
+		},
+		{
+			"group": "build",
+			"type": "shell",
+			"label": "Zig: Build Release",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"command": "zig",
+			"args": [
+				"build",
+				"-Doptimize=ReleaseFast"
+			]
+		},
+		{
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": [],
+			"type": "shell",
+			"label": "Zig: Run Debug",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"command": "zig",
+			"args": [
+				"build",
+				"run"
+			]
+		},
+		{
+			"group": "build",
+			"type": "shell",
+			"label": "Zig: Run Release",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"command": "zig",
+			"args": [
+				"build",
+				"-Doptimize=ReleaseFast",
+				"run"
+			]
+		}
+	]
+}
