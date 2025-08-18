@@ -1,6 +1,8 @@
 const std = @import("std");
 const File = std.fs.File;
 
+pub const render = @import("render.zig");
+
 pub const vector = @import("vector.zig");
 pub const Random = @import("Random.zig");
 pub const tools = @import("tools.zig");
