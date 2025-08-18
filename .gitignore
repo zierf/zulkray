@@ -7,3 +7,5 @@ zig-out
 
 # generated image
 /image.ppm
+# saved screenshot (Key S in Renderer)
+/screenshot.bmp

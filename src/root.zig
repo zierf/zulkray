@@ -17,22 +17,50 @@ pub const ColorRgb = vector.ColorRgb;
 pub const Material = material.Material;
 pub const MaterialMap = material.MaterialMap;
 
-pub fn exportAsPpm(
-    file: *const File,
+pub const RenderError = error{
+    ImageBufferTooSmall,
+};
+
+pub fn renderRgbImage(
     world: *const World,
     material_map: *const MaterialMap,
     camera: *const Camera,
+    image_buffer: []u8,
+) !void {
+    const color_bytes = ColorRgb.dimension;
+
+    // buffer size must be enough to contain 3 byte per pixel
+    if (image_buffer.len < (camera.image_width * camera.image_height * color_bytes)) {
+        return RenderError.ImageBufferTooSmall;
+    }
+
+    for (0..camera.image_height) |row| {
+        for (0..camera.image_width) |column| {
+            const color: ColorRgb = try camera.renderAt(world, material_map, row, column);
+
+            const color_offset = (row * camera.image_width * color_bytes) + (column * color_bytes);
+
+            image_buffer[color_offset + 0] = color.rByte();
+            image_buffer[color_offset + 1] = color.gByte();
+            image_buffer[color_offset + 2] = color.bByte();
+        }
+    }
+}
+
+pub fn exportAsPpm(
+    file: *const File,
+    width: usize,
+    height: usize,
+    image_buffer: []const u8,
     binary: ?bool,
 ) !void {
+    const color_bytes = ColorRgb.dimension;
+
+    if (image_buffer.len < (width * height * color_bytes)) {
+        return RenderError.ImageBufferTooSmall;
+    }
+
     const is_binary = binary orelse true;
-
-    // track progress
-    const progress_root = std.Progress.start(.{
-        .root_name = "Rendering Scene …",
-    });
-
-    const sub_node = progress_root.start("rendered rows", camera.image_height);
-    defer sub_node.end();
 
     // prepare file writer
     var buffered_writer = std.io.bufferedWriter(file.writer());
@@ -43,30 +71,28 @@ pub fn exportAsPpm(
 
     try file_writer.print("{s}\n{} {}\n255\n", .{
         image_format,
-        camera.image_width,
-        camera.image_height,
+        width,
+        height,
     });
 
-    // write image contents
-    for (0..camera.image_height) |row| {
-        for (0..camera.image_width) |column| {
-            const color: ColorRgb = try camera.renderAt(world, material_map, row, column);
+    if (is_binary) {
+        try file_writer.writeAll(image_buffer);
+    } else {
+        try file_writer.print("\n", .{});
 
-            if (is_binary) {
-                try file_writer.writeByte(color.rByte());
-                try file_writer.writeByte(color.gByte());
-                try file_writer.writeByte(color.bByte());
-            } else {
+        for (0..height) |row| {
+            for (0..width) |column| {
+                const color_offset = (row * width * color_bytes) + (column * color_bytes);
+
                 try file_writer.print("{: >3} {: >3} {: >3}\n", .{
-                    color.rByte(),
-                    color.gByte(),
-                    color.bByte(),
+                    image_buffer[color_offset + 0],
+                    image_buffer[color_offset + 1],
+                    image_buffer[color_offset + 2],
                 });
             }
-        }
 
-        sub_node.completeOne();
-        // std.Thread.sleep(10 * 1_000_000);
+            try file_writer.print("\n", .{});
+        }
     }
 
     // flush writer to write all data
