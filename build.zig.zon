@@ -65,6 +65,10 @@
         //    // actually used.
         //    .lazy = false,
         //},
+        .datetime = .{
+            .url = "https://github.com/clickingbuttons/datetime/archive/refs/tags/0.14.0.tar.gz",
+            .hash = "datetime-0.14.0-tX11tT20AAA7g6J9LpM9Rneq0D9zMOnA9loaIbcXP0NJ",
+        },
     },
 
     // Specifies the set of files and directories that are included in this package.
@@ -79,8 +83,7 @@
         "build.zig",
         "build.zig.zon",
         "src",
-        // For example...
-        //"LICENSE",
-        //"README.md",
+        "LICENSE",
+        "ReadMe.md",
     },
 }

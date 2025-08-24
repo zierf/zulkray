@@ -53,6 +53,12 @@ pub fn build(b: *std.Build) void {
         .root_module = lib_mod,
     });
 
+    const datetime = b.dependency("datetime", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    lib.root_module.addImport("datetime", datetime.module("datetime"));
+
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
     // running `zig build`).

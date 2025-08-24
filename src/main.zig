@@ -21,6 +21,30 @@ const Object = lib.World.Object;
 const Sphere = lib.Sphere;
 const World = lib.World;
 
+pub const std_options: std.Options = .{
+    // define logFn to override the std implementation
+    .logFn = lib.logging.logMessage,
+    // set the standard log level
+    .log_level = switch (builtin.mode) {
+        .Debug => .debug,
+        .ReleaseSafe => .info,
+        .ReleaseFast, .ReleaseSmall => .warn,
+    },
+    // define log levels for scopes
+    .log_scope_levels = &[_]std.log.ScopeLevel{
+        .{ .scope = .APP, .level = switch (builtin.mode) {
+            .Debug => .debug,
+            .ReleaseSafe => .info,
+            .ReleaseFast, .ReleaseSmall => .warn,
+        } },
+        .{ .scope = .VK, .level = switch (builtin.mode) {
+            .Debug => .info,
+            .ReleaseSafe => .info,
+            .ReleaseFast, .ReleaseSmall => .warn,
+        } },
+    },
+};
+
 const show_demo_scene = false;
 
 pub fn main() !void {
