@@ -22,6 +22,7 @@ pub const RenderError = error{
     SdlTextureCreationFailed,
     SdlVulkanExtensionsNotFound,
     SdlWindowCreationFailed,
+    VulkanDebugMessengerCreationFailed,
     VulkanEnumerateExtensionsFailed,
     VulkanEnumerateLayersFailed,
     VulkanInstanceCreationFailed,
@@ -472,8 +473,8 @@ const VulkanAllocator = struct {
             else => {},
         }
 
-        if (self.allocation_callbacks_ptr != null) {
-            self.allocator.destroy(self.allocation_callbacks_ptr.?);
+        if (self.allocation_callbacks_ptr) |allocation_callbacks_ptr| {
+            self.allocator.destroy(allocation_callbacks_ptr);
         }
 
         self.allocator.destroy(self);
@@ -637,31 +638,82 @@ const VulkanAllocator = struct {
     }
 };
 
+pub const VulkanLogLevel = enum(u32) {
+    const Self = @This();
+
+    VerboseInfo = 0,
+    Verbose = vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT,
+    // Info = vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
+    Warning = vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+    Error = vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+
+    pub fn toBitmask(self: *const Self) u32 {
+        const enum_value = @intFromEnum(self.*);
+        var bitmask: u32 = 0;
+
+        inline for (std.meta.fields(Self)) |field| {
+            if (enum_value <= field.value) {
+                bitmask |= field.value;
+            }
+        }
+
+        // info fills output too much, but it's higher bitmask value
+        // requires an artificial lower level and special case
+        if (enum_value == @intFromEnum(Self.VerboseInfo)) {
+            bitmask |= vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+        }
+
+        return bitmask;
+    }
+};
+
 pub const VulkanInstance = struct {
     const Self = @This();
 
     allocator: Allocator,
     vulkan_allocator: *VulkanAllocator,
+    debug_messenger: vk.VkDebugUtilsMessengerEXT,
     dispatcher: VkFnDispatcher,
     layers: [][*:0]const u8,
     extensions: [][*:0]const u8,
-    vk_instance_create_info: vk.VkInstanceCreateInfo,
     instance: std.meta.Child(vk.VkInstance),
 
-    pub fn init(allocator: Allocator) !Self {
+    pub fn init(allocator: Allocator, log_level: VulkanLogLevel) !Self {
         const layers = try Self.loadLayers(allocator);
         errdefer cleanupSentinelStringSlice(allocator, layers);
 
         const extensions = try Self.loadExtensions(allocator);
         errdefer cleanupSentinelStringSlice(allocator, extensions);
 
-        const vk_instance_create_info = std.mem.zeroInit(vk.VkInstanceCreateInfo, .{
+        const vk_debug_utils_messenger_create_info: ?vk.VkDebugUtilsMessengerCreateInfoEXT = blk: {
+            if (builtin.mode == .Debug) {
+                break :blk std.mem.zeroInit(
+                    vk.VkDebugUtilsMessengerCreateInfoEXT,
+                    .{
+                        .sType = vk.VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+                        .messageSeverity = log_level.toBitmask(),
+                        // VK_DEBUG_UTILS_MESSAGE_TYPE_DEVICE_ADDRESS_BINDING_BIT_EXT (requires VK_EXT_device_address_binding_report)
+                        .messageType = vk.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | vk.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | vk.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+                        .pfnUserCallback = &debugCallback,
+                        .pUserData = null,
+                    },
+                );
+            }
+
+            break :blk null;
+        };
+
+        var vk_instance_create_info = std.mem.zeroInit(vk.VkInstanceCreateInfo, .{
             .sType = vk.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             .enabledLayerCount = @as(u32, @intCast(layers.len)),
             .ppEnabledLayerNames = layers.ptr,
             .enabledExtensionCount = @as(u32, @intCast(extensions.len)),
             .ppEnabledExtensionNames = extensions.ptr,
         });
+
+        if (vk_debug_utils_messenger_create_info) |debug_utils_messenger_create_info| {
+            vk_instance_create_info.pNext = &debug_utils_messenger_create_info;
+        }
 
         const vulkan_allocator = try VulkanAllocator.create(allocator);
         errdefer vulkan_allocator.destroy();
@@ -691,36 +743,85 @@ pub const VulkanInstance = struct {
             return RenderError.VulkanInstanceCreationFailed;
         }
 
-        const dispatcher = VkFnDispatcher.init(
-            instance,
-            vk_get_instance_proc_addr,
-        ) catch {
-            const vk_destroy_instance = try VkFnDispatcher.loadVkFunctionPointer(
+        // cleanup instance in case of a subsequent error
+        errdefer {
+            const vk_destroy_instance = VkFnDispatcher.loadVkFunctionPointer(
                 instance,
                 vk_get_instance_proc_addr,
                 "vkDestroyInstance",
             );
 
-            vk_destroy_instance(
+            if (vk_destroy_instance) |destroy_instance| {
+                destroy_instance(
+                    instance,
+                    vulkan_allocator.allocation_callbacks_ptr,
+                );
+            } else |_| {
+                // fail gracefully
+            }
+        }
+
+        const dispatcher = try VkFnDispatcher.init(
+            instance,
+            vk_get_instance_proc_addr,
+        );
+
+        var debug_messenger: vk.VkDebugUtilsMessengerEXT = null;
+
+        if (vk_debug_utils_messenger_create_info) |debug_utils_messenger_create_info| {
+            // requires extension VK_EXT_debug_utils
+            const vk_create_debug_utils_messenger = try VkFnDispatcher.loadVkFunctionPointer(
                 instance,
-                vulkan_allocator.allocation_callbacks_ptr,
+                vk_get_instance_proc_addr,
+                "vkCreateDebugUtilsMessengerEXT",
             );
 
-            return RenderError.VulkanLoadFunctionPointerFailed;
-        };
+            const messenger_creation_result = vk_create_debug_utils_messenger(
+                instance,
+                &debug_utils_messenger_create_info,
+                vulkan_allocator.allocation_callbacks_ptr,
+                &debug_messenger,
+            );
+
+            if (messenger_creation_result != vk.VK_SUCCESS) {
+                logSdlError(
+                    "%s\n",
+                    "Could not create Vulkan Debug Messenger!",
+                );
+                return RenderError.VulkanDebugMessengerCreationFailed;
+            }
+        }
 
         return .{
             .allocator = allocator,
             .vulkan_allocator = vulkan_allocator,
+            .debug_messenger = debug_messenger,
             .dispatcher = dispatcher,
             .layers = layers,
             .extensions = extensions,
-            .vk_instance_create_info = vk_instance_create_info,
             .instance = instance.?,
         };
     }
 
     pub fn deinit(self: *const Self) void {
+        if (self.debug_messenger) |debug_messenger| {
+            const vk_destroy_debug_utils_messenger = VkFnDispatcher.loadVkFunctionPointer(
+                self.instance,
+                self.dispatcher.vkGetInstanceProcAddr,
+                "vkDestroyDebugUtilsMessengerEXT",
+            );
+
+            if (vk_destroy_debug_utils_messenger) |destroy_messenger| {
+                destroy_messenger(
+                    self.instance,
+                    debug_messenger,
+                    self.vulkan_allocator.allocation_callbacks_ptr,
+                );
+            } else |_| {
+                // fail gracefully
+            }
+        }
+
         self.dispatcher.vkDestroyInstance(
             self.instance,
             self.vulkan_allocator.allocation_callbacks_ptr,
@@ -893,6 +994,7 @@ pub const VulkanInstance = struct {
 
         const extensions_prepend = if (builtin.mode == .Debug) [_][]const u8{
             // prepend list for debug builds
+            vk.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
         } else [_][]const u8{
             // prepend list for release builds
         };
@@ -936,6 +1038,23 @@ pub const VulkanInstance = struct {
         }
 
         return application_extensions;
+    }
+
+    fn debugCallback(
+        messageSeverity: vk.VkDebugUtilsMessageSeverityFlagBitsEXT,
+        messageType: vk.VkDebugUtilsMessageTypeFlagsEXT,
+        pCallbackData: [*c]const vk.VkDebugUtilsMessengerCallbackDataEXT,
+        pUserData: ?*anyopaque,
+    ) callconv(.c) vk.VkBool32 {
+        _ = messageSeverity;
+        _ = messageType;
+        _ = pUserData;
+
+        const data: *const vk.VkDebugUtilsMessengerCallbackDataEXT = @ptrCast(pCallbackData);
+
+        std.debug.print("~ {s}\n", .{data.pMessage});
+
+        return vk.VK_FALSE;
     }
 };
 

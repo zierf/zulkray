@@ -115,7 +115,7 @@ pub fn main() !void {
     );
     defer window.deinit();
 
-    const vulkan_instance = try VulkanInstance.init(gpa);
+    const vulkan_instance = try VulkanInstance.init(gpa, .Verbose);
     defer vulkan_instance.deinit();
 
     const surface = try VulkanSurface.init(
