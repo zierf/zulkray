@@ -1,4 +1,6 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
 const lib = @import("zulkray_lib");
 
 const SdlWindow = lib.render.SdlWindow;
@@ -22,15 +24,26 @@ const World = lib.World;
 const show_demo_scene = false;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 
-    const allocator = gpa.allocator();
+    const gpa, const is_debug = gpa: {
+        if (builtin.os.tag == .wasi) {
+            break :gpa .{ std.heap.wasm_allocator, false };
+        }
+        break :gpa switch (builtin.mode) {
+            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+            // see https://ziglang.org/download/0.14.0/release-notes.html#SmpAllocator
+            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
+        };
+    };
+    defer if (is_debug) {
+        std.debug.assert(debug_allocator.deinit() == .ok);
+    };
 
-    var material_map = MaterialMap.init(allocator);
+    var material_map = MaterialMap.init(gpa);
     defer material_map.deinit();
 
-    var world = World.init(allocator);
+    var world = World.init(gpa);
     defer world.deinit();
 
     const camera: Camera = blk: {
@@ -67,11 +80,11 @@ pub fn main() !void {
         }
     };
 
-    const image_buffer = try allocator.alloc(
+    const image_buffer = try gpa.alloc(
         u8,
         ColorRgb.dimension * camera.image_width * camera.image_height,
     );
-    defer allocator.free(image_buffer);
+    defer gpa.free(image_buffer);
 
     try lib.renderRgbImage(
         &world,
@@ -102,7 +115,7 @@ pub fn main() !void {
     );
     defer window.deinit();
 
-    const vulkan_instance = try VulkanInstance.init();
+    const vulkan_instance = try VulkanInstance.init(gpa);
     defer vulkan_instance.deinit();
 
     const surface = try VulkanSurface.init(
