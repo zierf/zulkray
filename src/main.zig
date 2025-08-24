@@ -32,16 +32,32 @@ pub const std_options: std.Options = .{
     },
     // define log levels for scopes
     .log_scope_levels = &[_]std.log.ScopeLevel{
-        .{ .scope = .APP, .level = switch (builtin.mode) {
-            .Debug => .debug,
-            .ReleaseSafe => .info,
-            .ReleaseFast, .ReleaseSmall => .warn,
-        } },
-        .{ .scope = .VK, .level = switch (builtin.mode) {
-            .Debug => .info,
-            .ReleaseSafe => .info,
-            .ReleaseFast, .ReleaseSmall => .warn,
-        } },
+        .{
+            .scope = lib.logging.LoggingScopes.Application.asLiteral(),
+            .level = switch (builtin.mode) {
+                .Debug => .debug,
+                .ReleaseSafe => .info,
+                .ReleaseFast, .ReleaseSmall => .warn,
+            },
+        },
+        .{
+            .scope = lib.logging.LoggingScopes.Vulkan.asLiteral(),
+            .level = switch (builtin.mode) {
+                .Debug => .info,
+                // validation layers are disabled for release builds
+                // only app .info associated with the Vulkan scope is shown
+                .ReleaseSafe => .info,
+                .ReleaseFast, .ReleaseSmall => .warn,
+            },
+        },
+        .{
+            .scope = lib.logging.LoggingScopes.SDL.asLiteral(),
+            .level = switch (builtin.mode) {
+                .Debug => .debug,
+                .ReleaseSafe => .info,
+                .ReleaseFast, .ReleaseSmall => .warn,
+            },
+        },
     },
 };
 
@@ -139,7 +155,7 @@ pub fn main() !void {
     );
     defer window.deinit();
 
-    const vulkan_instance = try VulkanInstance.init(gpa, .Verbose);
+    const vulkan_instance = try VulkanInstance.init(gpa);
     defer vulkan_instance.deinit();
 
     const surface = try VulkanSurface.init(

@@ -1,6 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const logging = @import("logging.zig");
+
 const sdl = @cImport({
     @cInclude("SDL3/SDL.h");
     @cInclude("SDL3/SDL_vulkan.h");
@@ -14,6 +16,10 @@ const vk = @cImport({
 const Alignment = std.mem.Alignment;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+
+const logger = logging.applog;
+const vklog = logging.vklog;
+const sdllog = logging.sdllog;
 
 pub const RenderError = error{
     SdlInitializationFailed,
@@ -56,10 +62,7 @@ pub const SdlWindow = struct {
         height: usize,
     ) !Self {
         if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
-            logSdlError(
-                "Could not initialize SDL: %s\n",
-                sdl.SDL_GetError(),
-            );
+            sdllog.err("Could not initialize SDL: {s}", .{sdl.SDL_GetError()});
             return RenderError.SdlInitializationFailed;
         }
 
@@ -69,10 +72,7 @@ pub const SdlWindow = struct {
             @intCast(height),
             sdl.SDL_WINDOW_VULKAN,
         ) orelse {
-            logSdlError(
-                "Could not create window: %s\n",
-                sdl.SDL_GetError(),
-            );
+            sdllog.err("Could not create window: {s}", .{sdl.SDL_GetError()});
             return RenderError.SdlWindowCreationFailed;
         };
 
@@ -93,10 +93,7 @@ pub const SdlWindow = struct {
         // "You should not free the returned array; it is owned by SDL."
         // see https://wiki.libsdl.org/SDL3/SDL_Vulkan_GetInstanceExtensions
         const extensions = sdl.SDL_Vulkan_GetInstanceExtensions(&extensions_count) orelse {
-            logSdlError(
-                "Retrieving Vulkan extensions failed: %s\n",
-                sdl.SDL_GetError(),
-            );
+            sdllog.err("Retrieving SDL required Vulkan extensions failed: {s}", .{sdl.SDL_GetError()});
             return RenderError.SdlVulkanExtensionsNotFound;
         };
 
@@ -114,7 +111,7 @@ pub const SdlRenderer = struct {
 
     pub fn init(sdl_window: *const SdlWindow) !Self {
         // for (0..@intCast(sdl.SDL_GetNumRenderDrivers())) |index| {
-        //     std.debug.print("SDL RenderDriver {}: {s}\n", .{ index, sdl.SDL_GetRenderDriver(@intCast(index)) });
+        //     logger.debug("SDL RenderDriver {}: {s}", .{ index, sdl.SDL_GetRenderDriver(@intCast(index)) });
         // }
 
         // there will be no window on wayland without a renderer
@@ -124,10 +121,7 @@ pub const SdlRenderer = struct {
             sdl_window.window,
             "vulkan",
         ) orelse {
-            logSdlError(
-                "Error retrieving renderer: %s\n",
-                sdl.SDL_GetError(),
-            );
+            sdllog.err("Could not create renderer: {s}", .{sdl.SDL_GetError()});
             return RenderError.SdlRendererNotFound;
         };
 
@@ -152,7 +146,7 @@ pub const SdlRenderer = struct {
             &width,
             &height,
         )) {
-            logSdlError("Could not get window size: %s\n", sdl.SDL_GetError());
+            sdllog.err("Could not get window size: {s}", .{sdl.SDL_GetError()});
             return error.SdlTextureCreationFailed;
         }
 
@@ -163,7 +157,7 @@ pub const SdlRenderer = struct {
             width,
             height,
         ) orelse {
-            logSdlError("Could not create texture: %s\n", sdl.SDL_GetError());
+            sdllog.err("Could not create texture: {s}", .{sdl.SDL_GetError()});
             return error.SdlTextureCreationFailed;
         };
 
@@ -220,18 +214,12 @@ pub const SdlRenderer = struct {
         );
 
         if (screenshot == null) {
-            logSdlError(
-                "Could not create screenshot: %s\n",
-                sdl.SDL_GetError(),
-            );
+            sdllog.warn("Could not create screenshot: {s}", .{sdl.SDL_GetError()});
             return;
         }
 
         if (!sdl.SDL_SaveBMP(screenshot, "screenshot.bmp")) {
-            logSdlError(
-                "Could not save screenshot: %s\n",
-                sdl.SDL_GetError(),
-            );
+            sdllog.warn("Could not save screenshot: {s}", .{sdl.SDL_GetError()});
         }
 
         sdl.SDL_DestroySurface(screenshot);
@@ -267,7 +255,7 @@ pub const VkFnDispatcher = struct {
         var self: Self = undefined;
         // @memset(std.mem.asBytes(&self), 0x00);
 
-        std.debug.print("Load Vulkan Function Pointers:\n", .{});
+        vklog.debug("Load Vulkan Function Pointers:", .{});
 
         inline for (std.meta.fields(Self)) |field| {
             const fn_name = field.name;
@@ -277,11 +265,11 @@ pub const VkFnDispatcher = struct {
             for (global_commands) |global_command| {
                 if (std.mem.eql(u8, global_command, fn_name)) {
                     instance_pointer = null;
-                    std.debug.print("Vulkan FnPtr: {s} (global)\n", .{fn_name});
+                    vklog.debug("Vulkan FnPtr: {s} (global)", .{fn_name});
                     break;
                 }
             } else {
-                std.debug.print("Vulkan FnPtr: {s} (instanced)\n", .{fn_name});
+                vklog.debug("Vulkan FnPtr: {s} (instanced)", .{fn_name});
             }
 
             @field(self, fn_name) = try Self.loadVkFunctionPointer(
@@ -290,8 +278,6 @@ pub const VkFnDispatcher = struct {
                 fn_name,
             );
         }
-
-        std.debug.print("\n", .{});
 
         return self;
     }
@@ -306,11 +292,7 @@ pub const VkFnDispatcher = struct {
         const vk_get_instance_proc_addr = sdl.SDL_Vulkan_GetVkGetInstanceProcAddr();
 
         if (vk_get_instance_proc_addr == null) {
-            logSdlError(
-                "Retrieving pointer to " ++ proc_addr_name ++ " failed: %s\n",
-                sdl.SDL_GetError(),
-            );
-
+            sdllog.err("Retrieving pointer to '{s}' failed: {s}", .{ proc_addr_name, sdl.SDL_GetError() });
             return RenderError.VulkanLoadFunctionPointerFailed;
         }
 
@@ -337,11 +319,7 @@ pub const VkFnDispatcher = struct {
         );
 
         if (pfn_pointer == null) {
-            logSdlError(
-                "%s\n",
-                "Retrieving pointer to '" ++ name ++ "' failed",
-            );
-
+            vklog.err("Retrieving pointer to '{s}' failed!", .{name});
             return RenderError.VulkanLoadFunctionPointerFailed;
         }
 
@@ -482,19 +460,19 @@ const VulkanAllocator = struct {
 
     pub fn printStatistics(self: *const Self) void {
         // format in B|KiB|MiB|GiB|TiB (std.fmt.fmtIntSizeBin) / B|kB|MB|GB|TB (std.fmt.fmtIntSizeDec)
-        std.debug.print(
-            \\Allocations:   {: >10.3} ({})
-            \\Reallocations: {: >10.3} ({})
-            \\Total:         {: >10.3} ({})
-            \\Freed:         {: >10.3} ({})
-            \\
-        , .{
+        vklog.info("Allocations:   {: >10.3} ({})", .{
             std.fmt.fmtIntSizeBin(self.tracker.bytes_allocated),
             self.tracker.count_allocated,
+        });
+        vklog.info("Reallocations: {: >10.3} ({})", .{
             std.fmt.fmtIntSizeBin(self.tracker.bytes_reallocated),
             self.tracker.count_reallocated,
+        });
+        vklog.info("Total:         {: >10.3} ({})", .{
             std.fmt.fmtIntSizeBin(self.tracker.bytes_allocated + self.tracker.bytes_reallocated),
             self.tracker.count_allocated + self.tracker.count_reallocated,
+        });
+        vklog.info("Freed:         {: >10.3} ({})", .{
             std.fmt.fmtIntSizeBin(self.tracker.bytes_freed),
             self.tracker.count_freed,
         });
@@ -622,7 +600,7 @@ const VulkanAllocator = struct {
     ) callconv(.c) void {
         _ = pUserData;
 
-        std.debug.print("Internal Allocation of {} Bytes (Type {}) in Scope {}\n", .{ size, allocationType, allocationScope });
+        logger.debug("Internal Allocation of {} Bytes (Type {}) in Scope {}\n", .{ size, allocationType, allocationScope });
     }
 
     /// see https://registry.khronos.org/vulkan/specs/latest/man/html/PFN_vkInternalFreeNotification.html
@@ -634,16 +612,15 @@ const VulkanAllocator = struct {
     ) callconv(.c) void {
         _ = pUserData;
 
-        std.debug.print("Internal Free of {} Bytes (Type {}) in Scope {}\n", .{ size, allocationType, allocationScope });
+        logger.debug("Internal Free of {} Bytes (Type {}) in Scope {}\n", .{ size, allocationType, allocationScope });
     }
 };
 
 pub const VulkanLogLevel = enum(u32) {
     const Self = @This();
 
-    VerboseInfo = 0,
     Verbose = vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT,
-    // Info = vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
+    Info = vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
     Warning = vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
     Error = vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
 
@@ -655,12 +632,6 @@ pub const VulkanLogLevel = enum(u32) {
             if (enum_value <= field.value) {
                 bitmask |= field.value;
             }
-        }
-
-        // info fills output too much, but it's higher bitmask value
-        // requires an artificial lower level and special case
-        if (enum_value == @intFromEnum(Self.VerboseInfo)) {
-            bitmask |= vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
         }
 
         return bitmask;
@@ -678,7 +649,7 @@ pub const VulkanInstance = struct {
     extensions: [][*:0]const u8,
     instance: std.meta.Child(vk.VkInstance),
 
-    pub fn init(allocator: Allocator, log_level: VulkanLogLevel) !Self {
+    pub fn init(allocator: Allocator) !Self {
         const layers = try Self.loadLayers(allocator);
         errdefer cleanupSentinelStringSlice(allocator, layers);
 
@@ -691,7 +662,8 @@ pub const VulkanInstance = struct {
                     vk.VkDebugUtilsMessengerCreateInfoEXT,
                     .{
                         .sType = vk.VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-                        .messageSeverity = log_level.toBitmask(),
+                        // consider all severity levels and let the callback set the appropriate log level
+                        .messageSeverity = VulkanLogLevel.Verbose.toBitmask(),
                         // VK_DEBUG_UTILS_MESSAGE_TYPE_DEVICE_ADDRESS_BINDING_BIT_EXT (requires VK_EXT_device_address_binding_report)
                         .messageType = vk.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | vk.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | vk.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
                         .pfnUserCallback = &debugCallback,
@@ -736,10 +708,7 @@ pub const VulkanInstance = struct {
         );
 
         if (instance_creation_result != vk.VK_SUCCESS) {
-            logSdlError(
-                "%s\n",
-                "Could not create Vulkan instance!",
-            );
+            vklog.err("Could not create Vulkan instance: {}", .{instance_creation_result});
             return RenderError.VulkanInstanceCreationFailed;
         }
 
@@ -784,10 +753,7 @@ pub const VulkanInstance = struct {
             );
 
             if (messenger_creation_result != vk.VK_SUCCESS) {
-                logSdlError(
-                    "%s\n",
-                    "Could not create Vulkan Debug Messenger!",
-                );
+                vklog.err("Could not create Vulkan Debug Messenger: {}", .{messenger_creation_result});
                 return RenderError.VulkanDebugMessengerCreationFailed;
             }
         }
@@ -949,7 +915,7 @@ pub const VulkanInstance = struct {
             // prepend list for release builds
         };
 
-        std.debug.print("Create Layer List for Application:\n", .{});
+        logger.debug("Create Layer List for Application:n", .{});
 
         // reserve enough space for list of layers
         var application_layers: [][*:0]const u8 = try allocator.alloc(
@@ -963,10 +929,8 @@ pub const VulkanInstance = struct {
         }
 
         for (application_layers, 0..) |layer_name, index| {
-            std.debug.print("vkLayer({}): {s}\n", .{ index, layer_name });
+            logger.debug("vkLayer({}): {s}", .{ index, layer_name });
         }
-
-        std.debug.print("\n", .{});
 
         const unsupported_layers = try checkUnsupportedLayers(allocator, application_layers);
         defer unsupported_layers.deinit();
@@ -974,7 +938,7 @@ pub const VulkanInstance = struct {
         if (unsupported_layers.items.len > 0) {
             for (unsupported_layers.items) |*unsupported_layer| {
                 const unsupported_name = std.mem.span(unsupported_layer.*);
-                logSdlError("Could not load layer: %s\n", unsupported_name);
+                vklog.err("Could not load layer: {s}", .{unsupported_name});
             }
             return RenderError.VulkanLoadLayersFailed;
         }
@@ -983,14 +947,13 @@ pub const VulkanInstance = struct {
     }
 
     fn loadExtensions(allocator: Allocator) ![][*:0]const u8 {
-        std.debug.print("Load SDL required extensions:\n", .{});
+        sdllog.debug("Load SDL required extensions:", .{});
 
         const sdl_extensions = try SdlWindow.getRequiredExtensionNames();
 
         for (sdl_extensions, 0..) |extension, index| {
-            std.debug.print("vkExtension({}): {s} (SDL required)\n", .{ index, extension });
+            sdllog.debug("vkExtension({}): {s} (SDL required)", .{ index, extension });
         }
-        std.debug.print("\n", .{});
 
         const extensions_prepend = if (builtin.mode == .Debug) [_][]const u8{
             // prepend list for debug builds
@@ -999,7 +962,7 @@ pub const VulkanInstance = struct {
             // prepend list for release builds
         };
 
-        std.debug.print("Create Extensions List for Application:\n", .{});
+        logger.debug("Create Extension List for Application:", .{});
 
         // reserve enough space for own and SDL required extensions
         var application_extensions: [][*:0]const u8 = try allocator.alloc(
@@ -1021,10 +984,8 @@ pub const VulkanInstance = struct {
         }
 
         for (application_extensions, 0..) |extension_name, index| {
-            std.debug.print("vkExtension({}): {s}\n", .{ index, extension_name });
+            logger.debug("vkExtension({}): {s}", .{ index, extension_name });
         }
-
-        std.debug.print("\n", .{});
 
         const unsupported_extensions = try checkUnsupportedExtensions(allocator, application_extensions);
         defer unsupported_extensions.deinit();
@@ -1032,7 +993,7 @@ pub const VulkanInstance = struct {
         if (unsupported_extensions.items.len > 0) {
             for (unsupported_extensions.items) |*unsupported_extension| {
                 const unsupported_name = std.mem.span(unsupported_extension.*);
-                logSdlError("Could not load extension: %s\n", unsupported_name);
+                vklog.err("Could not load extension: {s}", .{unsupported_name});
             }
             return RenderError.VulkanLoadExtensionsFailed;
         }
@@ -1046,13 +1007,20 @@ pub const VulkanInstance = struct {
         pCallbackData: [*c]const vk.VkDebugUtilsMessengerCallbackDataEXT,
         pUserData: ?*anyopaque,
     ) callconv(.c) vk.VkBool32 {
-        _ = messageSeverity;
         _ = messageType;
         _ = pUserData;
 
         const data: *const vk.VkDebugUtilsMessengerCallbackDataEXT = @ptrCast(pCallbackData);
 
-        std.debug.print("~ {s}\n", .{data.pMessage});
+        if (messageSeverity & vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT > 0) {
+            vklog.debug("{s}", .{data.pMessage});
+        } else if (messageSeverity & vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT > 0) {
+            vklog.info("{s}", .{data.pMessage});
+        } else if (messageSeverity & vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT > 0) {
+            vklog.warn("{s}", .{data.pMessage});
+        } else if (messageSeverity & vk.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT > 0) {
+            vklog.err("{s}", .{data.pMessage});
+        }
 
         return vk.VK_FALSE;
     }
@@ -1076,7 +1044,7 @@ pub const VulkanSurface = struct {
         );
 
         if (!surface_creation_success) {
-            logSdlError("Could not create surface: %s\n", sdl.SDL_GetError());
+            sdllog.err("Could not create surface: {s}", .{sdl.SDL_GetError()});
             return RenderError.SdlSurfaceCreationFailed;
         }
 
@@ -1094,11 +1062,3 @@ pub const VulkanSurface = struct {
         );
     }
 };
-
-fn logSdlError(fmt: [*:0]const u8, err: [*:0]const u8) void {
-    sdl.SDL_LogError(
-        sdl.SDL_LOG_CATEGORY_APPLICATION,
-        fmt,
-        err,
-    );
-}

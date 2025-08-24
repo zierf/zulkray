@@ -1,24 +1,25 @@
 const std = @import("std");
 const datetime = @import("datetime");
 
-const Self = @This();
-
 pub const LoggingScopes = enum {
     Default,
     Application,
     Vulkan,
+    SDL,
 
     pub fn asLiteral(self: *const @This()) @Type(.enum_literal) {
         return switch (self.*) {
             .Default => std.log.default_log_scope,
             .Application => .APP,
             .Vulkan => .VK,
+            .SDL => .SDL,
         };
     }
 };
 
 pub const applog = std.log.scoped(LoggingScopes.Application.asLiteral());
 pub const vklog = std.log.scoped(LoggingScopes.Vulkan.asLiteral());
+pub const sdllog = std.log.scoped(LoggingScopes.SDL.asLiteral());
 
 pub fn logMessage(
     comptime level: std.log.Level,
@@ -31,10 +32,13 @@ pub fn logMessage(
     const scope_name = switch (scope) {
         LoggingScopes.Application.asLiteral(),
         LoggingScopes.Vulkan.asLiteral(),
+        LoggingScopes.SDL.asLiteral(),
         => @tagName(scope),
+        // don't print default scope
         LoggingScopes.Default.asLiteral() => "",
         else => blk: {
-            if (@intFromEnum(level) <= @intFromEnum(std.log.Level.err)) {
+            // just print warnings and errors for unknown scopes
+            if (@intFromEnum(level) <= @intFromEnum(std.log.Level.warn)) {
                 break :blk @tagName(scope);
             } else {
                 return;
@@ -56,16 +60,14 @@ pub fn logMessage(
     const tty_config = std.io.tty.detectConfig(stderr_file);
 
     const message_color: std.io.tty.Color = switch (level) {
-        .debug, .info => switch (scope) {
-            // different color for messages from vulkan layers
-            LoggingScopes.Vulkan.asLiteral() => .cyan,
-            else => .reset,
-        },
+        .debug => .cyan,
+        .info => .reset,
         .warn => .yellow,
         .err => .red,
     };
 
-    tty_config.setColor(stderr, message_color) catch {};
+    // zlint doesn't like `catch {}`, statement suppresses errors
+    if (tty_config.setColor(stderr, message_color)) {} else |_| {}
 
     // print prefix
     nosuspend stderr.print("[{rfc3339}] {s: <" ++ scope_width ++ "} {s: <" ++ loglevel_width ++ "} ", .{
@@ -76,7 +78,7 @@ pub fn logMessage(
     // print original message after prefix
     nosuspend stderr.print(format, args) catch return;
 
-    tty_config.setColor(stderr, .reset) catch {};
+    if (tty_config.setColor(stderr, .reset)) {} else |_| {}
 
     nosuspend stderr.print("\n", .{}) catch return;
 }
